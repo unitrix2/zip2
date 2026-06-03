@@ -1,0 +1,588 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ZIP Explorer Pro (Ultimate Edition)</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+
+  :root {
+    --bg: #09090b; --surface: #18181b; --surface2: #27272a; --border: #3f3f46;
+    --accent: #38bdf8; --accent2: #8b5cf6; --accent3: #10b981;
+    --danger: #ef4444; --warn: #eab308; --text: #f8fafc; --muted: #94a3b8;
+    --font-sans: 'Inter', sans-serif; --font-mono: 'JetBrains Mono', monospace;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { background: var(--bg); color: var(--text); font-family: var(--font-sans); min-height: 100vh; overflow-x: hidden; }
+  body::before { content: ''; position: fixed; inset: 0; background: radial-gradient(circle at 50% 0%, rgba(56, 189, 248, 0.05) 0%, transparent 50%), radial-gradient(circle at 80% 100%, rgba(139, 92, 246, 0.05) 0%, transparent 50%); pointer-events: none; z-index: 0; }
+
+  .container { max-width: 1000px; margin: 0 auto; padding: 2rem 1.5rem; position: relative; z-index: 1; }
+  header { text-align: center; margin-bottom: 2.5rem; animation: fadeDown 0.6s ease; }
+  .logo { font-size: 2.5rem; font-weight: 800; background: linear-gradient(135deg, var(--accent) 0%, var(--accent2) 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; letter-spacing: -1px; }
+  .tagline { color: var(--muted); font-size: 0.85rem; font-weight: 500; margin-top: 0.5rem; text-transform: uppercase; letter-spacing: 2px; }
+
+  /* Input Zone */
+  .input-zone { background: rgba(24, 24, 27, 0.6); backdrop-filter: blur(12px); border: 1px solid var(--border); border-radius: 16px; padding: 1.5rem; margin-bottom: 2rem; box-shadow: 0 10px 30px rgba(0,0,0,0.2); }
+  .input-row { display: flex; gap: 0.75rem; align-items: center; }
+  .url-input { flex: 1; background: rgba(0,0,0,0.3); border: 1px solid var(--border); border-radius: 10px; padding: 0.9rem 1.2rem; color: var(--text); font-family: var(--font-mono); font-size: 0.85rem; outline: none; transition: border 0.2s; }
+  .url-input:focus { border-color: var(--accent); }
+
+  /* Buttons */
+  .btn { padding: 0.9rem 1.5rem; border-radius: 10px; border: none; cursor: pointer; font-family: var(--font-sans); font-size: 0.85rem; font-weight: 600; transition: all 0.2s ease; white-space: nowrap; }
+  .btn-primary { background: linear-gradient(135deg, var(--accent2), var(--accent)); color: #fff; box-shadow: 0 4px 15px rgba(56, 189, 248, 0.2); }
+  .btn-primary:hover { transform: translateY(-2px); box-shadow: 0 6px 20px rgba(56, 189, 248, 0.3); }
+  .btn-sm { padding: 0.5rem 1rem; font-size: 0.8rem; border-radius: 8px; }
+  .btn-download { background: rgba(56, 189, 248, 0.1); color: var(--accent); border: 1px solid rgba(56, 189, 248, 0.2); }
+  .btn-download:hover { background: rgba(56, 189, 248, 0.2); }
+  .btn-view { background: rgba(16, 185, 129, 0.1); color: var(--accent3); border: 1px solid rgba(16, 185, 129, 0.2); }
+  .btn-view:hover { background: rgba(16, 185, 129, 0.2); }
+
+  /* Status & Explorer */
+  .status-bar { display: flex; gap: 0.75rem; margin-top: 1.2rem; flex-wrap: wrap; align-items: center; }
+  .badge { font-size: 0.75rem; font-weight: 500; padding: 0.3rem 0.8rem; border-radius: 20px; background: rgba(255,255,255,0.05); border: 1px solid var(--border); color: var(--text); }
+  .badge.accent { color: var(--accent); border-color: rgba(56, 189, 248, 0.3); background: rgba(56, 189, 248, 0.05); }
+  .badge.warn { color: var(--warn); border-color: rgba(234, 179, 8, 0.3); background: rgba(234, 179, 8, 0.05); }
+
+  .explorer { background: rgba(24, 24, 27, 0.6); backdrop-filter: blur(12px); border: 1px solid var(--border); border-radius: 16px; overflow: hidden; display: none; }
+  .explorer.show { display: block; animation: fadeUp 0.5s ease; }
+  .explorer-header { padding: 1rem 1.5rem; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; gap: 1rem; flex-wrap: wrap; background: rgba(0,0,0,0.2); }
+  .search-input { background: rgba(0,0,0,0.3); border: 1px solid var(--border); border-radius: 8px; padding: 0.5rem 1rem; color: var(--text); font-family: var(--font-sans); font-size: 0.8rem; outline: none; width: 250px; }
+  .file-item { display: flex; align-items: center; gap: 1rem; padding: 0.75rem 1.25rem; border-bottom: 1px solid rgba(255,255,255,0.02); transition: background 0.2s; }
+  .file-item:hover { background: rgba(255,255,255,0.04); }
+  .file-info { flex: 1; min-width: 0; }
+  .file-name { font-size: 0.85rem; font-weight: 500; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .file-path { font-size: 0.75rem; color: var(--muted); margin-top: 2px; }
+  .file-size { font-size: 0.75rem; font-family: var(--font-mono); color: var(--muted); min-width: 70px; text-align: right; }
+  .file-actions { display: flex; gap: 0.5rem; }
+
+  /* Toast Notifications */
+  .toast-container { position: fixed; bottom: 2rem; right: 2rem; display: flex; flex-direction: column; gap: 0.75rem; z-index: 9999; }
+  .toast { background: rgba(24, 24, 27, 0.9); backdrop-filter: blur(10px); border: 1px solid var(--border); border-left: 4px solid var(--accent); color: var(--text); padding: 1rem 1.5rem; border-radius: 8px; font-size: 0.85rem; font-weight: 500; box-shadow: 0 10px 30px rgba(0,0,0,0.3); animation: slideInRight 0.3s ease forwards; display: flex; align-items: center; gap: 0.75rem; }
+  .toast.fadeOut { animation: fadeOutRight 0.4s ease forwards; }
+
+  /* Universal Viewer Modal */
+  .modal-backdrop { position: fixed; inset: 0; background: rgba(0,0,0,0.95); z-index: 2000; display: none; align-items: center; justify-content: center; padding: 1rem; }
+  .modal-backdrop.show { display: flex; animation: fadeIn 0.3s ease; }
+  .viewer-modal { background: var(--surface); border: 1px solid var(--border); border-radius: 16px; overflow: hidden; width: 100%; max-width: 1100px; height: 85vh; display: flex; flex-direction: column; box-shadow: 0 10px 40px rgba(0,0,0,0.5); }
+  .viewer-header { padding: 1rem 1.5rem; background: rgba(0,0,0,0.4); border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; flex-shrink: 0; }
+  .viewer-title { font-size: 0.9rem; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: flex; align-items: center; gap: 0.5rem; }
+  .modal-close { background: rgba(255,255,255,0.05); border: 1px solid var(--border); color: var(--text); cursor: pointer; font-size: 1.2rem; width: 32px; height: 32px; border-radius: 8px; display: flex; align-items: center; justify-content: center; transition: all 0.2s; }
+  .modal-close:hover { background: var(--danger); border-color: var(--danger); }
+  
+  .viewer-body { position: relative; flex: 1; background: #050505; display: flex; align-items: center; justify-content: center; overflow: hidden; }
+  
+  /* Media Specific Styles */
+  video { width: 100%; height: 100%; outline: none; background: #000; transform: translateZ(0); will-change: transform; backface-visibility: hidden; }
+  audio { width: 80%; max-width: 600px; outline: none; }
+  .img-viewer { max-width: 100%; max-height: 100%; object-fit: contain; }
+  .pdf-viewer { width: 100%; height: 100%; border: none; background: #fff; }
+  
+  /* MS Office Viewer container */
+  .office-container { width: 100%; height: 100%; background: #f3f4f6; color: #111827; display: flex; flex-direction: column; overflow: hidden; }
+  .office-doc { background: #fff; margin: 1.5rem auto; width: 95%; max-width: 900px; min-height: 100%; padding: 3rem; box-shadow: 0 4px 15px rgba(0,0,0,0.1); border-radius: 6px; font-family: 'Calibri', 'Arial', sans-serif; line-height: 1.5; overflow: auto; }
+  
+  /* MS Excel UI Simulation */
+  .excel-wrapper { flex: 1; width: 100%; overflow: auto; background: #fff; }
+  .excel-tabs { display: flex; gap: 4px; background: #f3f4f6; padding: 0 10px 10px 10px; border-top: 1px solid #d4d4d4; overflow-x: auto; flex-shrink: 0; }
+  .excel-tab { padding: 6px 16px; background: #e5e7eb; border: 1px solid #d4d4d4; border-top: none; border-radius: 0 0 6px 6px; cursor: pointer; font-family: 'Calibri', sans-serif; font-size: 0.85rem; font-weight: 500; color: #4b5563; white-space: nowrap; transition: background 0.2s; }
+  .excel-tab:hover { background: #d1d5db; }
+  .excel-tab.active { background: #fff; font-weight: bold; color: #10b981; border-bottom: 3px solid #10b981; }
+  table.excel-table { width: max-content; min-width: 100%; border-collapse: collapse; font-family: 'Calibri', sans-serif; font-size: 0.85rem; }
+  table.excel-table th, table.excel-table td { border: 1px solid #d4d4d4; padding: 4px 8px; white-space: nowrap; color: #000; }
+  table.excel-table tr:first-child { background: #f3f3f3; font-weight: bold; text-align: center; position: sticky; top: 0; box-shadow: 0 1px 0 #d4d4d4; z-index: 10; }
+  table.excel-table tr:hover { background-color: #f9f9f9; }
+
+  /* Loading State */
+  .viewer-loading { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; background: rgba(5,5,5,0.9); z-index: 10; gap: 1rem; color: var(--muted); font-size: 0.9rem; }
+  .spinner { width: 40px; height: 40px; border: 3px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin 1s linear infinite; }
+  
+  .viewer-footer { padding: 0.8rem 1.5rem; background: var(--surface2); border-top: 1px solid var(--border); font-size: 0.75rem; color: var(--muted); flex-shrink: 0; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem; }
+
+  /* Toggle Switch UI */
+  .engine-toggle-wrap { display: flex; align-items: center; gap: 0.5rem; font-size: 0.75rem; color: var(--muted); cursor: pointer; }
+  .toggle-checkbox { display: none; }
+  .toggle-slider { width: 34px; height: 18px; background: var(--border); border-radius: 20px; position: relative; transition: 0.3s; }
+  .toggle-slider::after { content: ''; width: 14px; height: 14px; background: #fff; border-radius: 50%; position: absolute; top: 2px; left: 2px; transition: 0.3s; }
+  .toggle-checkbox:checked + .toggle-slider { background: var(--accent2); }
+  .toggle-checkbox:checked + .toggle-slider::after { transform: translateX(16px); }
+
+  @keyframes spin { 100% { transform: rotate(360deg); } }
+  @keyframes fadeDown { from { opacity:0; transform:translateY(-20px); } to { opacity:1; transform:translateY(0); } }
+  @keyframes fadeUp { from { opacity:0; transform:translateY(20px); } to { opacity:1; transform:translateY(0); } }
+  @keyframes fadeIn { from { opacity:0; } to { opacity:1; } }
+  @keyframes slideInRight { from { opacity:0; transform:translateX(50px); } to { opacity:1; transform:translateX(0); } }
+  @keyframes fadeOutRight { from { opacity:1; transform:translateX(0); } to { opacity:0; transform:translateX(50px); } }
+</style>
+<script src="https://cdn.jsdelivr.net/npm/xlsx/dist/xlsx.full.min.js" defer></script>
+<script src="https://cdn.jsdelivr.net/npm/jszip/dist/jszip.min.js" defer></script>
+<script src="https://cdn.jsdelivr.net/npm/docx-preview/dist/docx-preview.min.js" defer></script>
+</head>
+<body>
+
+<div class="container">
+  <header>
+    <div class="logo">ZIP Explorer Pro</div>
+    <div class="tagline">Browse · Stream · Insta-Load</div>
+  </header>
+
+  <div class="input-zone">
+    <div class="input-row">
+      <input type="url" class="url-input" id="zipUrl" placeholder="Direct Google Drive / Cloudflare URL paste karein..." />
+      <button class="btn btn-primary" onclick="loadZip()">Load ZIP</button>
+    </div>
+    <div class="status-bar" id="statusBar" style="display:none">
+      <span class="badge accent" id="totalFiles"></span>
+      <span class="badge" id="totalSize"></span>
+      <span class="badge" id="zipName"></span>
+    </div>
+  </div>
+
+  <div class="explorer" id="explorer">
+    <div class="explorer-header">
+      <div style="font-weight: 600; font-size: 0.9rem;">📁 Files</div>
+      <input type="text" class="search-input" id="searchInput" placeholder="Search files..." oninput="filterFiles()" />
+    </div>
+    <div class="file-list" id="fileList"></div>
+  </div>
+</div>
+
+<div class="toast-container" id="toastContainer"></div>
+
+<div class="modal-backdrop" id="viewerModal">
+  <div class="viewer-modal">
+    <div class="viewer-header">
+      <div class="viewer-title" id="viewerTitle">👁️ Viewer</div>
+      <button class="modal-close" onclick="closeViewer()">✕</button>
+    </div>
+    
+    <div class="viewer-body" id="viewerBody">
+      <div class="viewer-loading" id="viewerLoading" style="display:none;">
+        <div class="spinner"></div>
+        <div id="loadingText" style="font-family: var(--font-mono);">Processing File...</div>
+      </div>
+      <div id="renderContainer" style="width:100%; height:100%; display:flex; align-items:center; justify-content:center;"></div>
+    </div>
+
+    <div class="viewer-footer">
+      <div id="viewerInfo" style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap;"></div>
+      
+      <div style="display: flex; gap: 15px; align-items: center;">
+        <label class="engine-toggle-wrap" id="engineToggleWrap" title="Agar document fail ho, toh is safe mode ko ON karke dekhein.">
+          <input type="checkbox" class="toggle-checkbox" id="engineToggle" onchange="toggleEngine()">
+          <div class="toggle-slider"></div>
+          SW Mode
+        </label>
+        <button class="btn btn-sm btn-download" id="viewerDownloadBtn" style="display:none;">⬇ Download</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+// ─── Service Worker Setup ───
+if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('sw.js').then(reg => {
+        navigator.serviceWorker.addEventListener('controllerchange', () => { window.location.reload(); });
+    }).catch(err => console.error('SW Error:', err));
+}
+
+function registerStreamSW(id, payload) {
+    return new Promise((resolve, reject) => {
+        if (!navigator.serviceWorker.controller) {
+            reject(new Error("Service Worker is not active. Reload page."));
+            return;
+        }
+        const channel = new MessageChannel();
+        channel.port1.onmessage = (e) => { if(e.data && e.data.status === 'ok') resolve(); };
+        navigator.serviceWorker.controller.postMessage({ type: 'REGISTER_STREAM', id: id, payload: payload }, [channel.port2]);
+        setTimeout(resolve, 800); 
+    });
+}
+
+// ─── File Extensions & Icons ───
+const EXT = {
+    VIDEO: ['mp4','webm','mkv','avi','mov','ts'],
+    AUDIO: ['mp3','wav','ogg','flac','m4a'],
+    IMAGE: ['jpg','jpeg','png','gif','webp','svg'],
+    OFFICE: ['xls','xlsx','xlsm','csv','doc','docx','ppt','pptx'],
+    PDF: ['pdf']
+};
+
+function getExt(name) { return (name.split('.').pop() || '').toLowerCase(); }
+function getMimeType(name) {
+    const ext = getExt(name);
+    const map = {
+        'mp4': 'video/mp4', 'mkv': 'video/mp4', 'avi': 'video/mp4', 'webm': 'video/webm',
+        'mp3': 'audio/mpeg', 'ogg': 'audio/ogg', 'wav': 'audio/wav',
+        'jpg': 'image/jpeg', 'jpeg': 'image/jpeg', 'png': 'image/png', 'gif': 'image/gif', 'webp': 'image/webp',
+        'pdf': 'application/pdf',
+        'xlsx': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        'xls': 'application/vnd.ms-excel',
+        'xlsm': 'application/vnd.ms-excel.sheet.macroEnabled.12',
+        'csv': 'text/csv',
+        'docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+        'doc': 'application/msword'
+    };
+    return map[ext] || 'application/octet-stream';
+}
+function getIcon(name) { 
+    const ext = getExt(name); 
+    if(EXT.VIDEO.includes(ext)) return '🎬'; 
+    if(EXT.AUDIO.includes(ext)) return '🎵'; 
+    if(EXT.IMAGE.includes(ext)) return '🖼️'; 
+    if(EXT.PDF.includes(ext)) return '📄'; 
+    if(EXT.OFFICE.includes(ext)) return '📊'; 
+    return '📦'; 
+}
+function canView(name) { return Object.values(EXT).some(arr => arr.includes(getExt(name))); }
+function formatSize(bytes) { if (!bytes) return '—'; const u = ['B','KB','MB','GB']; let i=0; while(bytes>=1024 && i<3){bytes/=1024; i++;} return bytes.toFixed(1) + ' ' + u[i]; }
+
+let zipUrl = ''; let zipSize = 0; let allFiles = [];
+
+// ─── ZIP Parser Logic ───
+async function fetchRange(url, start, end) {
+  const res = await fetch(url, { headers: { 'Range': `bytes=${start}-${end}` } });
+  if (!res.ok) throw new Error(`HTTP Error ${res.status}`);
+  return new DataView(await res.arrayBuffer());
+}
+
+const u16 = (dv, o) => dv.getUint16(o, true);
+const u32 = (dv, o) => dv.getUint32(o, true);
+const u64 = (dv, o) => dv.getUint32(o + 4, true) * 0x100000000 + dv.getUint32(o, true);
+function safeDecode(bytes) { try { return new TextDecoder('utf-8').decode(bytes); } catch { return new TextDecoder('cp437').decode(bytes); } }
+
+async function loadZip() {
+  const url = document.getElementById('zipUrl').value.trim();
+  if (!url) { showToast('❌ Error: URL is required!'); return; }
+  zipUrl = url; 
+  document.getElementById('explorer').classList.remove('show');
+  showToast('🔄 Reading ZIP...', 2000);
+  
+  try {
+    const initRes = await fetch(zipUrl, { headers: { 'Range': 'bytes=0-0' } });
+    if (!initRes.ok) throw new Error("CORS or Proxy blocked.");
+    const cr = initRes.headers.get('content-range');
+    if(!cr) throw new Error("Server does not support Range Requests.");
+    
+    zipSize = parseInt(cr.split('/').pop(), 10);
+    const tailSize = Math.min(65536 + 100, zipSize);
+    const start = Math.max(0, zipSize - tailSize);
+    const tailDv = await fetchRange(zipUrl, start, zipSize - 1);
+    
+    let eocdOff = -1;
+    for (let i = tailDv.byteLength - 22; i >= 0; i--) { if (tailDv.getUint32(i, true) === 0x06054b50) { eocdOff = i; break; } }
+    if (eocdOff === -1) throw new Error('Invalid ZIP.');
+
+    let cdSize = u32(tailDv, eocdOff + 12); let cdOffset = u32(tailDv, eocdOff + 16);
+    const locOff = eocdOff - 20;
+    if (locOff >= 0 && tailDv.getUint32(locOff, true) === 0x07064b50) {
+      const eocd64Offset = u64(tailDv, locOff + 8);
+      if (eocd64Offset - start >= 0) { const lOff = eocd64Offset - start; cdSize = u64(tailDv, lOff + 40); cdOffset = u64(tailDv, lOff + 48); }
+    }
+
+    let cdDv = (cdOffset >= start) ? new DataView(tailDv.buffer, tailDv.byteOffset + (cdOffset - start), cdSize) : await fetchRange(zipUrl, cdOffset, cdOffset + cdSize - 1);
+    allFiles = []; let offset = 0;
+
+    while (offset + 46 <= cdDv.byteLength) {
+      if (cdDv.getUint32(offset, true) !== 0x02014b50) break;
+      const comp = u16(cdDv, offset + 10); 
+      let csz = u32(cdDv, offset + 20); let sz = u32(cdDv, offset + 24);
+      const nl = u16(cdDv, offset + 28); const el = u16(cdDv, offset + 30); const cl = u16(cdDv, offset + 32);
+      let localOffset = u32(cdDv, offset + 42);
+
+      const nameBytes = new Uint8Array(cdDv.buffer, cdDv.byteOffset + offset + 46, nl);
+      const name = safeDecode(nameBytes);
+
+      if (el > 0) {
+        let eOff = offset + 46 + nl; const eEnd = eOff + el;
+        while (eOff + 4 <= eEnd) {
+          const tag = u16(cdDv, eOff); const tsz = u16(cdDv, eOff + 2);
+          if (tag === 0x0001) {
+            let p = eOff + 4;
+            if (sz === 0xFFFFFFFF) { sz = u64(cdDv, p); p += 8; }
+            if (csz === 0xFFFFFFFF) { csz = u64(cdDv, p); p += 8; }
+            if (localOffset === 0xFFFFFFFF) { localOffset = u64(cdDv, p); }
+          }
+          eOff += 4 + tsz;
+        }
+      }
+      if (!name.endsWith('/')) { allFiles.push({ path: name, name: name.split('/').pop(), folder: name.includes('/') ? name.substring(0, name.lastIndexOf('/')) : '', ext: getExt(name), size: sz, csize: csz, offset: localOffset, compression: comp }); }
+      offset += 46 + nl + el + cl;
+    }
+
+    document.getElementById('totalFiles').textContent = `${allFiles.length} files`;
+    document.getElementById('totalSize').textContent = `${formatSize(allFiles.reduce((s,f)=>s+f.size,0))}`;
+    document.getElementById('zipName').textContent = url.split('/').pop().split('?')[0];
+    document.getElementById('statusBar').style.display = 'flex';
+    renderFiles(allFiles);
+    document.getElementById('explorer').classList.add('show');
+    showToast('✅ ZIP Index Loaded!', 3000);
+
+  } catch(e) { showToast(`❌ Fetch Error: ${e.message}`); }
+}
+
+async function prepareFileData(f) {
+    if (f.dataStart) return f;
+    const lhDv = await fetchRange(zipUrl, f.offset, f.offset + 29);
+    f.dataStart = f.offset + 30 + u16(lhDv, 26) + u16(lhDv, 28);
+    f.dataEnd = f.dataStart + f.csize - 1;
+    return f;
+}
+
+// ─── Native Download Trigger ───
+async function downloadFile(path) {
+  const f = allFiles.find(file => file.path === path); if (!f) return;
+  showToast(`🚀 Sending "${f.name}" to browser downloads...`);
+  try {
+      await prepareFileData(f);
+      const id = 'dl_' + Date.now();
+      await registerStreamSW(id, { zipUrl, compression: f.compression, size: f.size, dataStart: f.dataStart, dataEnd: f.dataEnd, name: f.name });
+      const iframe = document.createElement('iframe');
+      iframe.style.display = 'none';
+      iframe.src = window.location.pathname + `?sw_stream=${id}&dl=1`;
+      document.body.appendChild(iframe);
+      setTimeout(() => { if (document.body.contains(iframe)) document.body.removeChild(iframe); }, 15000);
+  } catch(e) { showToast(`❌ Error: ${e.message}`); }
+}
+
+// ─── Dual Engine View Logic ───
+let windowUseSwMode = false;
+window.currentViewingPath = null;
+window.currentBlobUrl = null;
+
+function toggleEngine() {
+    windowUseSwMode = document.getElementById('engineToggle').checked;
+    if (window.currentViewingPath) {
+        showToast(windowUseSwMode ? "♻️ Reloading with SW Engine..." : "⚡ Reloading with Insta-Load...", 1500);
+        viewFile(window.currentViewingPath);
+    }
+}
+
+async function viewFile(path) {
+  window.currentViewingPath = path;
+  const f = allFiles.find(file => file.path === path); if (!f) return;
+  
+  const container = document.getElementById('renderContainer');
+  const loading = document.getElementById('viewerLoading');
+  const title = document.getElementById('viewerTitle');
+  const dlBtn = document.getElementById('viewerDownloadBtn');
+  const info = document.getElementById('viewerInfo');
+  const loadingTxt = document.getElementById('loadingText');
+  const toggleWrap = document.getElementById('engineToggleWrap');
+  
+  // Cleanup memory
+  if (window.currentBlobUrl) { URL.revokeObjectURL(window.currentBlobUrl); window.currentBlobUrl = null; }
+  container.innerHTML = '';
+  
+  const ext = f.ext;
+  
+  if (EXT.VIDEO.includes(ext) || EXT.AUDIO.includes(ext)) {
+      toggleWrap.style.display = 'none';
+  } else {
+      toggleWrap.style.display = 'flex'; 
+  }
+
+  const engineBadge = (EXT.VIDEO.includes(ext) || EXT.AUDIO.includes(ext)) ? '<span class="badge" style="color:#38bdf8; border-color:#38bdf8;">Native Stream</span>' : (windowUseSwMode ? '<span class="badge" style="color:#a855f7; border-color:#a855f7;">SW Mode</span>' : '<span class="badge" style="color:#10b981; border-color:#10b981;">⚡ Insta-Load</span>');
+  info.innerHTML = `${engineBadge} <span class="badge">Format: ${f.ext.toUpperCase()}</span> <span class="badge">Size: ${formatSize(f.size)}</span>`;
+  title.innerHTML = `${getIcon(f.name)} ${f.name}`;
+  
+  document.getElementById('viewerModal').classList.add('show');
+  loading.style.display = 'flex';
+  
+  dlBtn.style.display = 'block';
+  dlBtn.onclick = () => downloadFile(f.path);
+
+  try {
+      await prepareFileData(f);
+      
+      if (EXT.VIDEO.includes(ext) && f.compression !== 0) {
+          info.innerHTML += ` <span class="badge warn">⚠️ Compressed Video (May stutter)</span>`;
+      }
+      if (ext === 'xlsm') {
+          info.innerHTML += ` <span class="badge warn">🔒 Macros Disabled (View Only)</span>`;
+      }
+
+      // --- ENGINE SELECTION ---
+      let targetStreamUrl = '';
+      let targetArrayBuffer = null;
+
+      if (EXT.VIDEO.includes(ext) || EXT.AUDIO.includes(ext)) {
+          loadingTxt.textContent = "Buffering Stream...";
+          const streamId = 'vid_' + Date.now();
+          await registerStreamSW(streamId, { zipUrl, compression: f.compression, size: f.size, dataStart: f.dataStart, dataEnd: f.dataEnd, name: f.name });
+          targetStreamUrl = window.location.pathname + `?sw_stream=${streamId}`;
+      } 
+      else {
+          if (windowUseSwMode) {
+              loadingTxt.textContent = "Loading via SW Engine...";
+              const streamId = 'doc_' + Date.now();
+              await registerStreamSW(streamId, { zipUrl, compression: f.compression, size: f.size, dataStart: f.dataStart, dataEnd: f.dataEnd, name: f.name });
+              targetStreamUrl = window.location.pathname + `?sw_stream=${streamId}`;
+              
+              if (EXT.OFFICE.includes(ext)) {
+                  const res = await fetch(targetStreamUrl);
+                  targetArrayBuffer = await res.arrayBuffer();
+              }
+          } else {
+              loadingTxt.textContent = "Insta-Loading to RAM...";
+              const fetchHeaders = new Headers();
+              fetchHeaders.set('Range', `bytes=${f.dataStart}-${f.dataEnd}`);
+              
+              const directRes = await fetch(zipUrl, { headers: fetchHeaders });
+              if (!directRes.ok) throw new Error("Server blocked direct read.");
+              
+              let memoryStream = directRes.body;
+              if (f.compression === 8) {
+                  memoryStream = memoryStream.pipeThrough(new DecompressionStream('deflate-raw'));
+              }
+              const decompressedRes = new Response(memoryStream);
+              
+              if (EXT.IMAGE.includes(ext) || EXT.PDF.includes(ext)) {
+                  const blob = await decompressedRes.blob();
+                  const typedBlob = new Blob([blob], { type: getMimeType(f.name) });
+                  targetStreamUrl = URL.createObjectURL(typedBlob);
+                  window.currentBlobUrl = targetStreamUrl; 
+              } else if (EXT.OFFICE.includes(ext)) {
+                  targetArrayBuffer = await decompressedRes.arrayBuffer();
+              }
+          }
+      }
+
+      // --- RENDERING PHASE ---
+      if (EXT.VIDEO.includes(ext)) {
+          container.innerHTML = `<video controls playsinline preload="auto"><source src="${targetStreamUrl}"></video>`;
+          const vid = container.querySelector('video');
+          vid.oncanplay = () => loading.style.display = 'none';
+          
+          // ✨ NEW LOGIC: PC Codec Fallback
+          vid.onerror = () => {
+              loading.style.display = 'none';
+              showToast("⚠️ Video Format Not Supported on PC. Switching to Audio Player...", 4000);
+              container.innerHTML = `
+                <div style="width:100%; height:100%; background:#000; display:flex; flex-direction:column; justify-content:center; align-items:center;">
+                    <div style="color:var(--accent); font-size:4rem; margin-bottom:1rem;">🎵</div>
+                    <div style="color:#fff; margin-bottom: 2rem; font-family:var(--font-sans); font-size:0.9rem;">Audio Mode Active (Video Codec Unsupported)</div>
+                    <audio controls autoplay style="width:80%; max-width:600px; outline:none;">
+                        <source src="${targetStreamUrl}">
+                    </audio>
+                </div>`;
+          };
+      } 
+      else if (EXT.AUDIO.includes(ext)) {
+          container.innerHTML = `<div style="text-align:center; width:100%;"><div style="font-size:4rem; margin-bottom:2rem;">🎵</div><audio controls autoplay style="width:80%; max-width:500px;"><source src="${targetStreamUrl}"></audio></div>`;
+          loading.style.display = 'none';
+      }
+      else if (EXT.IMAGE.includes(ext)) {
+          container.innerHTML = `<img src="${targetStreamUrl}" class="img-viewer" alt="image">`;
+          container.querySelector('img').onload = () => loading.style.display = 'none';
+      }
+      else if (EXT.PDF.includes(ext)) {
+          container.innerHTML = `<iframe src="${targetStreamUrl}" class="pdf-viewer"></iframe>`;
+          loading.style.display = 'none';
+      }
+      else if (EXT.OFFICE.includes(ext)) {
+          if (!targetArrayBuffer) throw new Error("Data Buffer Empty.");
+          
+          if (['xls', 'xlsx', 'xlsm', 'csv'].includes(ext)) {
+              loadingTxt.textContent = "Rendering Excel Sheets...";
+              while(typeof XLSX === 'undefined') { await new Promise(r => setTimeout(r, 100)); }
+              
+              const wb = XLSX.read(targetArrayBuffer, {type: 'array'});
+              window.currentExcelWb = wb; 
+              
+              let tabsHtml = '<div class="excel-tabs">';
+              wb.SheetNames.forEach((sheetName, index) => {
+                  tabsHtml += `<div class="excel-tab ${index === 0 ? 'active' : ''}" onclick="switchExcelSheet('${escHtml(sheetName)}', this)">${sheetName}</div>`;
+              });
+              tabsHtml += '</div>';
+              
+              const firstSheet = wb.Sheets[wb.SheetNames[0]];
+              const tableHtml = XLSX.utils.sheet_to_html(firstSheet, { id: "rendered-excel" });
+              
+              container.innerHTML = `
+                <div class="office-container">
+                    <div class="excel-wrapper" id="excelDataContainer">${tableHtml}</div>
+                    ${tabsHtml}
+                </div>
+              `;
+              
+              const table = document.getElementById('rendered-excel');
+              if(table) table.className = "excel-table";
+          } 
+          else if (['doc', 'docx'].includes(ext)) {
+              loadingTxt.textContent = "Rendering Word Document...";
+              while(typeof docx === 'undefined') { await new Promise(r => setTimeout(r, 100)); }
+              
+              container.innerHTML = `<div class="office-container" style="overflow:auto;"><div class="office-doc" id="officeDocArea"></div></div>`;
+              try { await docx.renderAsync(targetArrayBuffer, document.getElementById('officeDocArea')); }
+              catch { container.innerHTML = `<div style="color:#fff;">Word render failed. Please download the file.</div>`; }
+          }
+          else if (['ppt', 'pptx'].includes(ext)) {
+              container.innerHTML = `<div style="color:#fff; text-align:center;">Presentation Viewer is not supported natively.<br>Please use the <b>Download</b> button below to open in MS PowerPoint.</div>`;
+          }
+          loading.style.display = 'none';
+      }
+      
+  } catch(e) {
+      loading.style.display = 'none';
+      container.innerHTML = `<div style="color:var(--danger)">❌ Viewer Error: ${e.message}</div>`;
+  }
+}
+
+// ─── Excel Sheet Switcher Logic ───
+window.switchExcelSheet = function(sheetName, tabElement) {
+    if(!window.currentExcelWb) return;
+    
+    document.querySelectorAll('.excel-tab').forEach(tab => tab.classList.remove('active'));
+    tabElement.classList.add('active');
+    
+    const ws = window.currentExcelWb.Sheets[sheetName];
+    const tableHtml = XLSX.utils.sheet_to_html(ws, { id: "rendered-excel" });
+    document.getElementById('excelDataContainer').innerHTML = tableHtml;
+    
+    const table = document.getElementById('rendered-excel');
+    if(table) table.className = "excel-table";
+};
+
+function closeViewer() { 
+  if (window.currentBlobUrl) { URL.revokeObjectURL(window.currentBlobUrl); window.currentBlobUrl = null; }
+  document.getElementById('renderContainer').innerHTML = '';
+  document.getElementById('viewerModal').classList.remove('show');
+  window.currentExcelWb = null; 
+  window.currentViewingPath = null;
+}
+
+// ─── Global UI ───
+function escHtml(s) { return s.replace(/'/g, "\\'").replace(/"/g, '&quot;'); }
+function filterFiles() { const q = document.getElementById('searchInput').value.toLowerCase(); renderFiles(allFiles.filter(f => f.path.toLowerCase().includes(q))); }
+
+function renderFiles(files) {
+  const list = document.getElementById('fileList'); 
+  if (!files.length) { list.innerHTML = '<div style="padding:2rem;text-align:center;color:var(--muted);font-size:0.85rem;">No files found</div>'; return; }
+  list.innerHTML = files.map(f => `
+    <div class="file-item">
+      <div style="font-size:1.2rem; min-width:30px; text-align:center;">${getIcon(f.name)}</div>
+      <div class="file-info"><div class="file-name" title="${f.path}">${f.name}</div><div class="file-path">${f.folder}</div></div>
+      <div class="file-size">${formatSize(f.size)}</div>
+      <div class="file-actions">
+        ${canView(f.name) ? `<button class="btn btn-sm btn-view" onclick="viewFile('${escHtml(f.path)}')">👁️ View</button>` : ''}
+        <button class="btn btn-sm btn-download" onclick="downloadFile('${escHtml(f.path)}')">⬇ Download</button>
+      </div>
+    </div>`).join('');
+}
+
+function showToast(msg, duration = 4000) {
+    const container = document.getElementById('toastContainer');
+    const toast = document.createElement('div');
+    toast.className = 'toast';
+    toast.innerHTML = msg;
+    container.appendChild(toast);
+    setTimeout(() => { toast.classList.add('fadeOut'); setTimeout(() => toast.remove(), 400); }, duration);
+}
+
+document.getElementById('zipUrl').addEventListener('keydown', e => { if (e.key === 'Enter') loadZip(); });
+</script>
+</body>
+</html>
