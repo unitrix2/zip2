@@ -95,7 +95,7 @@ async function handleStreamRequest(request, f, urlObj) {
         }
 
         // ==========================================
-        // ENGINE 2: PLAYBACK (FAST MODE & DATA SAVER)
+        // ENGINE 2: NATIVE PLAYBACK (FAST MODE & SAVER)
         // ==========================================
         if (f.compression === 0) {
             let start = 0;
@@ -118,76 +118,48 @@ async function handleStreamRequest(request, f, urlObj) {
             const fetchHeaders = new Headers();
             fetchHeaders.set('Range', `bytes=${reqStart}-${reqEnd}`);
             
-            // ⚡ FAST MODE (Default): Pure Native Proxy. Solves the 908.7 KB jump deadlock.
+            // ✨ THE GHOST CONNECTION KILLER: signal: request.signal
+            // Jab browser stream seek karega, ye purane atke connections ko turant kaat dega
+            const res = await fetch(f.zipUrl, { 
+                headers: fetchHeaders, 
+                signal: request.signal 
+            });
+            
+            if (!res.ok) throw new Error("Proxy error.");
+
+            const resHeaders = new Headers();
+            resHeaders.set('Access-Control-Allow-Origin', '*');
+            resHeaders.set('Content-Type', mime);
+            resHeaders.set('Accept-Ranges', 'bytes');
+            
+            if (rangeHeader) {
+                resHeaders.set('Content-Range', `bytes ${start}-${end}/${f.size}`);
+                resHeaders.set('Content-Length', (end - start + 1).toString());
+            } else {
+                resHeaders.set('Content-Length', f.size.toString());
+            }
+
+            // 🚀 FAST MODE (Pure Native Stream)
             if (!isDataSaver) {
-                const res = await fetch(f.zipUrl, { headers: fetchHeaders });
-                if (!res.ok) throw new Error("Proxy error.");
-
-                const resHeaders = new Headers();
-                resHeaders.set('Access-Control-Allow-Origin', '*');
-                resHeaders.set('Content-Type', mime);
-                resHeaders.set('Accept-Ranges', 'bytes');
-                
-                if (rangeHeader) {
-                    resHeaders.set('Content-Range', `bytes ${start}-${end}/${f.size}`);
-                    resHeaders.set('Content-Length', (end - start + 1).toString());
-                    return new Response(res.body, { status: 206, headers: resHeaders });
-                }
-                resHeaders.set('Content-Length', f.size.toString());
-                return new Response(res.body, { status: 200, headers: resHeaders });
+                return new Response(res.body, { status: rangeHeader ? 206 : 200, headers: resHeaders });
             } 
-            // 🐢 DATA SAVER MODE: Chunks the stream to save background data
+            // 🐢 DATA SAVER (Transparent Throttling)
             else {
-                const abortCtrl = new AbortController();
-                request.signal.addEventListener('abort', () => abortCtrl.abort());
-                const res = await fetch(f.zipUrl, { headers: fetchHeaders, signal: abortCtrl.signal });
-                
-                const stream = new ReadableStream({
-                    async start(controller) {
-                        const reader = res.body.getReader();
-                        let totalRead = 0;
-                        const BURST = 5 * 1024 * 1024; // 5MB fast burst
-
-                        async function pump() {
-                            try {
-                                const { done, value } = await reader.read();
-                                if (done) { controller.close(); return; }
-                                
-                                controller.enqueue(value);
-                                totalRead += value.byteLength;
-                                
-                                if (totalRead > BURST) {
-                                    // Throttle download to save data
-                                    await new Promise(r => setTimeout(r, 150));
-                                }
-                                pump();
-                            } catch (err) {
-                                controller.error(err);
-                            }
-                        }
-                        pump();
-                    },
-                    cancel() { abortCtrl.abort(); }
+                const throttler = new TransformStream({
+                    async transform(chunk, controller) {
+                        controller.enqueue(chunk);
+                        // Slow down slightly to prevent aggressive buffering
+                        await new Promise(r => setTimeout(r, (chunk.byteLength / 1500000) * 1000));
+                    }
                 });
-
-                const resHeaders = new Headers();
-                resHeaders.set('Access-Control-Allow-Origin', '*');
-                resHeaders.set('Content-Type', mime);
-                resHeaders.set('Accept-Ranges', 'bytes');
-                if (rangeHeader) {
-                    resHeaders.set('Content-Range', `bytes ${start}-${end}/${f.size}`);
-                    resHeaders.set('Content-Length', (end - start + 1).toString());
-                    return new Response(stream, { status: 206, headers: resHeaders });
-                }
-                resHeaders.set('Content-Length', f.size.toString());
-                return new Response(stream, { status: 200, headers: resHeaders });
+                return new Response(res.body.pipeThrough(throttler), { status: rangeHeader ? 206 : 200, headers: resHeaders });
             }
         } 
         else {
             const fetchHeaders = new Headers();
             fetchHeaders.set('Range', `bytes=${f.dataStart}-${f.dataEnd}`);
             
-            const res = await fetch(f.zipUrl, { headers: fetchHeaders });
+            const res = await fetch(f.zipUrl, { headers: fetchHeaders, signal: request.signal });
             const stream = res.body.pipeThrough(new DecompressionStream('deflate-raw'));
             
             const resHeaders = new Headers();
@@ -197,7 +169,8 @@ async function handleStreamRequest(request, f, urlObj) {
             return new Response(stream, { status: 200, headers: resHeaders });
         }
     } catch(e) {
-        console.error("SW Proxy Error:", e);
+        // Abort errors are normal during seeking, log silently
+        if (e.name !== 'AbortError') console.error("SW Proxy Error:", e);
         return new Response(e.message, { status: 500 });
     }
 }
