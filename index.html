@@ -96,11 +96,12 @@
   .progress-bg { background: rgba(255,255,255,0.1); width: 100%; height: 6px; border-radius: 4px; overflow: hidden; }
   .progress-fill { background: linear-gradient(90deg, var(--accent), var(--accent2)); width: 0%; height: 100%; transition: width 0.3s ease; }
 
-  .engine-toggle-wrap { display: flex; align-items: center; gap: 0.5rem; font-size: 0.75rem; color: var(--muted); cursor: pointer; }
+  .engine-toggle-wrap { display: flex; align-items: center; gap: 0.5rem; font-size: 0.75rem; color: var(--muted); cursor: pointer; padding: 4px 8px; border-radius: 6px; background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.1); }
+  .engine-toggle-wrap:hover { background: rgba(255,255,255,0.08); }
   .toggle-checkbox { display: none; }
   .toggle-slider { width: 34px; height: 18px; background: var(--border); border-radius: 20px; position: relative; transition: 0.3s; }
   .toggle-slider::after { content: ''; width: 14px; height: 14px; background: #fff; border-radius: 50%; position: absolute; top: 2px; left: 2px; transition: 0.3s; }
-  .toggle-checkbox:checked + .toggle-slider { background: var(--accent2); }
+  .toggle-checkbox:checked + .toggle-slider { background: var(--accent3); } /* Green for Data Saver */
   .toggle-checkbox:checked + .toggle-slider::after { transform: translateX(16px); }
 
   @keyframes spin { 100% { transform: rotate(360deg); } }
@@ -164,10 +165,11 @@
       <div class="footer-top">
         <div id="viewerInfo" style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap;"></div>
         <div style="display: flex; gap: 15px; align-items: center;">
-          <label class="engine-toggle-wrap" id="engineToggleWrap" title="Agar document fail ho, toh is safe mode ko ON karke dekhein.">
+          <label class="engine-toggle-wrap" id="engineToggleWrap" title="Toggle between Fast Direct Stream and Background Data Saver">
+            <span style="color:var(--accent);">🚀 Fast</span>
             <input type="checkbox" class="toggle-checkbox" id="engineToggle" onchange="toggleEngine()">
             <div class="toggle-slider"></div>
-            SW Mode
+            <span style="color:var(--accent3);">🐢 Saver</span>
           </label>
           <button class="btn btn-sm btn-download" id="viewerDownloadBtn" style="display:none;">⬇ Download</button>
         </div>
@@ -176,7 +178,7 @@
       <div class="footer-telemetry" id="footerTelemetry">
         <div class="telemetry-stats">
             <span id="telSpeed" style="color:var(--accent);">⚡ Speed: Calculating...</span>
-            <span id="telProgress">Rhythm Engine Starting...</span>
+            <span id="telProgress">Buffer Status...</span>
         </div>
         <div class="progress-bg">
             <div class="progress-fill" id="telBar"></div>
@@ -332,13 +334,16 @@ async function downloadFile(path) {
   } catch(e) { showToast(`❌ Error: ${e.message}`); }
 }
 
-let windowUseSwMode = false;
+let windowUseSaverMode = false;
 window.currentViewingPath = null;
 window.currentBlobUrl = null;
 
 function toggleEngine() {
-    windowUseSwMode = document.getElementById('engineToggle').checked;
-    if (window.currentViewingPath) viewFile(window.currentViewingPath);
+    windowUseSaverMode = document.getElementById('engineToggle').checked;
+    if (window.currentViewingPath) {
+        showToast(windowUseSaverMode ? "🐢 Switched to Data Saver Mode" : "🚀 Switched to Fast Stream", 2000);
+        viewFile(window.currentViewingPath);
+    }
 }
 
 async function viewFile(path) {
@@ -350,7 +355,6 @@ async function viewFile(path) {
   const title = document.getElementById('viewerTitle');
   const dlBtn = document.getElementById('viewerDownloadBtn');
   const info = document.getElementById('viewerInfo');
-  const loadingTxt = document.getElementById('loadingText');
   const toggleWrap = document.getElementById('engineToggleWrap');
   const telemetryDash = document.getElementById('footerTelemetry');
   
@@ -360,9 +364,12 @@ async function viewFile(path) {
   telemetryDash.style.display = 'none';
   
   const ext = f.ext;
-  toggleWrap.style.display = (EXT.VIDEO.includes(ext) || EXT.AUDIO.includes(ext)) ? 'none' : 'flex';
+  toggleWrap.style.display = (EXT.VIDEO.includes(ext) || EXT.AUDIO.includes(ext)) ? 'flex' : 'none';
 
-  const engineBadge = (EXT.VIDEO.includes(ext) || EXT.AUDIO.includes(ext)) ? '<span class="badge" style="color:#38bdf8; border-color:#38bdf8;">Rhythm Proxy</span>' : (windowUseSwMode ? '<span class="badge" style="color:#a855f7; border-color:#a855f7;">SW Mode</span>' : '<span class="badge" style="color:#10b981; border-color:#10b981;">⚡ Insta-Load</span>');
+  const engineBadge = (EXT.VIDEO.includes(ext) || EXT.AUDIO.includes(ext)) 
+      ? (windowUseSaverMode ? '<span class="badge" style="color:#10b981; border-color:#10b981;">🐢 Data Saver</span>' : '<span class="badge" style="color:#38bdf8; border-color:#38bdf8;">🚀 Fast Stream</span>')
+      : '<span class="badge" style="color:#a855f7; border-color:#a855f7;">⚡ Insta-Load</span>';
+      
   info.innerHTML = `${engineBadge} <span class="badge">Format: ${f.ext.toUpperCase()}</span> <span class="badge">Size: ${formatSize(f.size)}</span>`;
   title.innerHTML = `${getIcon(f.name)} ${f.name}`;
   
@@ -379,30 +386,24 @@ async function viewFile(path) {
       let targetArrayBuffer = null;
 
       if (EXT.VIDEO.includes(ext) || EXT.AUDIO.includes(ext)) {
-          loadingTxt.textContent = "Connecting Adaptive Stream...";
           const streamId = 'vid_' + Date.now();
           await registerStreamSW(streamId, { zipUrl, compression: f.compression, size: f.size, dataStart: f.dataStart, dataEnd: f.dataEnd, name: f.name });
-          targetStreamUrl = window.location.pathname + `?sw_stream=${streamId}`;
+          
+          // ✨ Append &saver=1 flag to URL based on toggle
+          targetStreamUrl = window.location.pathname + `?sw_stream=${streamId}` + (windowUseSaverMode ? "&saver=1" : "");
           telemetryDash.style.display = 'flex';
       } 
       else {
-          if (windowUseSwMode) {
-              const streamId = 'doc_' + Date.now();
-              await registerStreamSW(streamId, { zipUrl, compression: f.compression, size: f.size, dataStart: f.dataStart, dataEnd: f.dataEnd, name: f.name });
-              targetStreamUrl = window.location.pathname + `?sw_stream=${streamId}`;
-              if (EXT.OFFICE.includes(ext)) { const res = await fetch(targetStreamUrl); targetArrayBuffer = await res.arrayBuffer(); }
-          } else {
-              const fetchHeaders = new Headers(); fetchHeaders.set('Range', `bytes=${f.dataStart}-${f.dataEnd}`);
-              const directRes = await fetch(zipUrl, { headers: fetchHeaders });
-              let memoryStream = f.compression === 8 ? directRes.body.pipeThrough(new DecompressionStream('deflate-raw')) : directRes.body;
-              const decompressedRes = new Response(memoryStream);
-              
-              if (EXT.IMAGE.includes(ext) || EXT.PDF.includes(ext)) {
-                  const blob = await decompressedRes.blob();
-                  window.currentBlobUrl = URL.createObjectURL(new Blob([blob], { type: 'application/octet-stream' }));
-                  targetStreamUrl = window.currentBlobUrl; 
-              } else if (EXT.OFFICE.includes(ext)) { targetArrayBuffer = await decompressedRes.arrayBuffer(); }
-          }
+          const fetchHeaders = new Headers(); fetchHeaders.set('Range', `bytes=${f.dataStart}-${f.dataEnd}`);
+          const directRes = await fetch(zipUrl, { headers: fetchHeaders });
+          let memoryStream = f.compression === 8 ? directRes.body.pipeThrough(new DecompressionStream('deflate-raw')) : directRes.body;
+          const decompressedRes = new Response(memoryStream);
+          
+          if (EXT.IMAGE.includes(ext) || EXT.PDF.includes(ext)) {
+              const blob = await decompressedRes.blob();
+              window.currentBlobUrl = URL.createObjectURL(new Blob([blob], { type: 'application/octet-stream' }));
+              targetStreamUrl = window.currentBlobUrl; 
+          } else if (EXT.OFFICE.includes(ext)) { targetArrayBuffer = await decompressedRes.arrayBuffer(); }
       }
 
       // --- RENDERING ---
@@ -416,7 +417,6 @@ async function viewFile(path) {
               container.innerHTML = `<div style="text-align:center; color:var(--danger); font-family:var(--font-sans);">❌ Format not natively supported.<br>Please Download and use VLC.</div>`;
           };
 
-          // Safe Native DOM Telemetry logic (Shows Rhythm Engine Status)
           let lastBufferedBytes = 0;
           let lastTime = performance.now();
           
@@ -435,7 +435,7 @@ async function viewFile(path) {
                       let speedMBps = (bytesDiff / (1024 * 1024)) / timeDiff;
                       if (speedMBps < 0) speedMBps = 0;
                       
-                      document.getElementById('telSpeed').textContent = `⚡ Pumping Rhythm: ~${speedMBps.toFixed(2)} MB/s`;
+                      document.getElementById('telSpeed').textContent = windowUseSaverMode ? `⚡ Saver Limit: ~${speedMBps.toFixed(2)} MB/s` : `⚡ Fast Stream: ~${speedMBps.toFixed(2)} MB/s`;
                       lastTime = now;
                       lastBufferedBytes = estimatedLoadedBytes;
                   }
