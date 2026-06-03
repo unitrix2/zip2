@@ -36,6 +36,7 @@ async function handleStreamRequest(request, f, urlObj) {
     try {
         const rangeHeader = request.headers.get('Range');
         const isDownload = urlObj.searchParams.get('dl') === '1';
+        const isDataSaver = urlObj.searchParams.get('saver') === '1';
         const mime = getMimeType(f.name);
 
         // ==========================================
@@ -94,7 +95,7 @@ async function handleStreamRequest(request, f, urlObj) {
         }
 
         // ==========================================
-        // ENGINE 2: ADAPTIVE RHYTHM PLAYBACK (For Mobile & PC Smoothness)
+        // ENGINE 2: PLAYBACK (FAST MODE & DATA SAVER)
         // ==========================================
         if (f.compression === 0) {
             let start = 0;
@@ -114,69 +115,73 @@ async function handleStreamRequest(request, f, urlObj) {
             const reqStart = f.dataStart + start;
             const reqEnd = f.dataStart + end;
             
-            // ⚡ FIX: Ties the stream to the Browser's player. If player aborts (seeks), we instantly kill the Ghost Connection.
-            const abortCtrl = new AbortController();
-            request.signal.addEventListener('abort', () => abortCtrl.abort());
-
             const fetchHeaders = new Headers();
             fetchHeaders.set('Range', `bytes=${reqStart}-${reqEnd}`);
             
-            const res = await fetch(f.zipUrl, { headers: fetchHeaders, signal: abortCtrl.signal });
-            if (!res.ok) throw new Error("Server rejected proxy request.");
+            // ⚡ FAST MODE (Default): Pure Native Proxy. Solves the 908.7 KB jump deadlock.
+            if (!isDataSaver) {
+                const res = await fetch(f.zipUrl, { headers: fetchHeaders });
+                if (!res.ok) throw new Error("Proxy error.");
 
-            // ⚡ THE RHYTHM PUMPER: Force-feeds the stream safely without waiting for finicky browser pulls
-            const stream = new ReadableStream({
-                async start(controller) {
-                    const reader = res.body.getReader();
-                    let totalRead = 0;
-                    // Fast Burst for the first 8MB to instantly load the MOOV atom and start the video
-                    const BURST_SIZE = 8 * 1024 * 1024; 
-
-                    async function pump() {
-                        try {
-                            const { done, value } = await reader.read();
-                            if (done) {
-                                controller.close();
-                                return;
-                            }
-                            
-                            controller.enqueue(value);
-                            totalRead += value.byteLength;
-                            
-                            // Adaptive Pace: Slows down after burst to save mobile data, 
-                            // but KEEPS the connection flowing continuously (no rhythm breaks)
-                            if (totalRead > BURST_SIZE) {
-                                // Paces download to ~2.5 MB/s
-                                const sleepMs = (value.byteLength / 2500000) * 1000;
-                                await new Promise(r => setTimeout(r, sleepMs));
-                            }
-                            
-                            pump();
-                        } catch (err) {
-                            // Suppress abort errors in console, as seeking naturally aborts streams
-                            controller.error(err);
-                        }
-                    }
-                    pump();
-                },
-                cancel() {
-                    abortCtrl.abort();
+                const resHeaders = new Headers();
+                resHeaders.set('Access-Control-Allow-Origin', '*');
+                resHeaders.set('Content-Type', mime);
+                resHeaders.set('Accept-Ranges', 'bytes');
+                
+                if (rangeHeader) {
+                    resHeaders.set('Content-Range', `bytes ${start}-${end}/${f.size}`);
+                    resHeaders.set('Content-Length', (end - start + 1).toString());
+                    return new Response(res.body, { status: 206, headers: resHeaders });
                 }
-            });
+                resHeaders.set('Content-Length', f.size.toString());
+                return new Response(res.body, { status: 200, headers: resHeaders });
+            } 
+            // 🐢 DATA SAVER MODE: Chunks the stream to save background data
+            else {
+                const abortCtrl = new AbortController();
+                request.signal.addEventListener('abort', () => abortCtrl.abort());
+                const res = await fetch(f.zipUrl, { headers: fetchHeaders, signal: abortCtrl.signal });
+                
+                const stream = new ReadableStream({
+                    async start(controller) {
+                        const reader = res.body.getReader();
+                        let totalRead = 0;
+                        const BURST = 5 * 1024 * 1024; // 5MB fast burst
 
-            const resHeaders = new Headers();
-            resHeaders.set('Access-Control-Allow-Origin', '*');
-            resHeaders.set('Content-Type', mime);
-            resHeaders.set('Accept-Ranges', 'bytes');
-            
-            if (rangeHeader) {
-                resHeaders.set('Content-Range', `bytes ${start}-${end}/${f.size}`);
-                resHeaders.set('Content-Length', (end - start + 1).toString());
-                return new Response(stream, { status: 206, headers: resHeaders });
+                        async function pump() {
+                            try {
+                                const { done, value } = await reader.read();
+                                if (done) { controller.close(); return; }
+                                
+                                controller.enqueue(value);
+                                totalRead += value.byteLength;
+                                
+                                if (totalRead > BURST) {
+                                    // Throttle download to save data
+                                    await new Promise(r => setTimeout(r, 150));
+                                }
+                                pump();
+                            } catch (err) {
+                                controller.error(err);
+                            }
+                        }
+                        pump();
+                    },
+                    cancel() { abortCtrl.abort(); }
+                });
+
+                const resHeaders = new Headers();
+                resHeaders.set('Access-Control-Allow-Origin', '*');
+                resHeaders.set('Content-Type', mime);
+                resHeaders.set('Accept-Ranges', 'bytes');
+                if (rangeHeader) {
+                    resHeaders.set('Content-Range', `bytes ${start}-${end}/${f.size}`);
+                    resHeaders.set('Content-Length', (end - start + 1).toString());
+                    return new Response(stream, { status: 206, headers: resHeaders });
+                }
+                resHeaders.set('Content-Length', f.size.toString());
+                return new Response(stream, { status: 200, headers: resHeaders });
             }
-            
-            resHeaders.set('Content-Length', f.size.toString());
-            return new Response(stream, { status: 200, headers: resHeaders });
         } 
         else {
             const fetchHeaders = new Headers();
