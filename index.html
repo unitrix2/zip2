@@ -68,7 +68,8 @@
   
   .viewer-body { position: relative; flex: 1; background: #050505; display: flex; align-items: center; justify-content: center; overflow: hidden; }
   
-  video { width: 100%; height: 100%; outline: none; background: #000; }
+  /* Media Specific Styles - Enhanced for Netflix style loading */
+  video { width: 100%; height: 100%; outline: none; background: #000; object-fit: contain; }
   audio { width: 80%; max-width: 600px; outline: none; }
   .img-viewer { max-width: 100%; max-height: 100%; object-fit: contain; }
   .pdf-viewer { width: 100%; height: 100%; border: none; background: #fff; }
@@ -88,7 +89,15 @@
   .viewer-loading { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; background: rgba(5,5,5,0.9); z-index: 10; gap: 1rem; color: var(--muted); font-size: 0.9rem; }
   .spinner { width: 40px; height: 40px; border: 3px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin 1s linear infinite; }
   
-  .viewer-footer { padding: 0.8rem 1.5rem; background: var(--surface2); border-top: 1px solid var(--border); font-size: 0.75rem; color: var(--muted); flex-shrink: 0; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem; }
+  /* ✨ NEW: Dual-Row Footer Design */
+  .viewer-footer { padding: 1rem 1.5rem; background: var(--surface2); border-top: 1px solid var(--border); display: flex; flex-direction: column; gap: 0.8rem; flex-shrink: 0; }
+  .footer-top { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem; width: 100%; }
+  
+  /* Telemetry Dashboard CSS */
+  .footer-telemetry { display: none; flex-direction: column; gap: 0.5rem; width: 100%; background: rgba(0,0,0,0.3); padding: 0.8rem 1rem; border-radius: 8px; border: 1px solid rgba(255,255,255,0.05); }
+  .telemetry-stats { display: flex; justify-content: space-between; font-family: var(--font-mono); font-size: 0.75rem; color: var(--text); }
+  .progress-bg { background: rgba(255,255,255,0.1); width: 100%; height: 6px; border-radius: 4px; overflow: hidden; }
+  .progress-fill { background: linear-gradient(90deg, var(--accent), var(--accent2)); width: 0%; height: 100%; transition: width 0.3s ease; }
 
   .engine-toggle-wrap { display: flex; align-items: center; gap: 0.5rem; font-size: 0.75rem; color: var(--muted); cursor: pointer; }
   .toggle-checkbox { display: none; }
@@ -155,15 +164,26 @@
     </div>
 
     <div class="viewer-footer">
-      <div id="viewerInfo" style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap;"></div>
+      <div class="footer-top">
+        <div id="viewerInfo" style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap;"></div>
+        <div style="display: flex; gap: 15px; align-items: center;">
+          <label class="engine-toggle-wrap" id="engineToggleWrap" title="Agar document fail ho, toh is safe mode ko ON karke dekhein.">
+            <input type="checkbox" class="toggle-checkbox" id="engineToggle" onchange="toggleEngine()">
+            <div class="toggle-slider"></div>
+            SW Mode
+          </label>
+          <button class="btn btn-sm btn-download" id="viewerDownloadBtn" style="display:none;">⬇ Download</button>
+        </div>
+      </div>
       
-      <div style="display: flex; gap: 15px; align-items: center;">
-        <label class="engine-toggle-wrap" id="engineToggleWrap" title="Agar document fail ho, toh is safe mode ko ON karke dekhein.">
-          <input type="checkbox" class="toggle-checkbox" id="engineToggle" onchange="toggleEngine()">
-          <div class="toggle-slider"></div>
-          SW Mode
-        </label>
-        <button class="btn btn-sm btn-download" id="viewerDownloadBtn" style="display:none;">⬇ Download</button>
+      <div class="footer-telemetry" id="footerTelemetry">
+        <div class="telemetry-stats">
+            <span id="telSpeed" style="color:var(--accent);">⚡ Speed: 0.00 MB/s</span>
+            <span id="telProgress">Buffer: 0 B / 0 B (0%)</span>
+        </div>
+        <div class="progress-bg">
+            <div class="progress-fill" id="telBar"></div>
+        </div>
       </div>
     </div>
   </div>
@@ -324,7 +344,6 @@ function toggleEngine() {
     if (window.currentViewingPath) viewFile(window.currentViewingPath);
 }
 
-// ✨ THE FIX: Add ?audio_fallback=1 to completely bypass stalled browser caches
 window.triggerAudioFallback = function(streamUrl) {
     const container = document.getElementById('renderContainer');
     const audioUrl = streamUrl + "&audio_fallback=1";
@@ -358,16 +377,19 @@ async function viewFile(path) {
   const info = document.getElementById('viewerInfo');
   const loadingTxt = document.getElementById('loadingText');
   const toggleWrap = document.getElementById('engineToggleWrap');
+  const telemetryDash = document.getElementById('footerTelemetry');
   
   if (window.currentBlobUrl) { URL.revokeObjectURL(window.currentBlobUrl); window.currentBlobUrl = null; }
   if (window.deadlockWatchdog) clearInterval(window.deadlockWatchdog);
+  if (window.telemetryReceiver) { window.telemetryReceiver.close(); window.telemetryReceiver = null; }
   
   container.innerHTML = '';
+  telemetryDash.style.display = 'none';
   
   const ext = f.ext;
   toggleWrap.style.display = (EXT.VIDEO.includes(ext) || EXT.AUDIO.includes(ext)) ? 'none' : 'flex';
 
-  const engineBadge = (EXT.VIDEO.includes(ext) || EXT.AUDIO.includes(ext)) ? '<span class="badge" style="color:#38bdf8; border-color:#38bdf8;">Native Proxy</span>' : (windowUseSwMode ? '<span class="badge" style="color:#a855f7; border-color:#a855f7;">SW Mode</span>' : '<span class="badge" style="color:#10b981; border-color:#10b981;">⚡ Insta-Load</span>');
+  const engineBadge = (EXT.VIDEO.includes(ext) || EXT.AUDIO.includes(ext)) ? '<span class="badge" style="color:#38bdf8; border-color:#38bdf8;">Turbo Stream</span>' : (windowUseSwMode ? '<span class="badge" style="color:#a855f7; border-color:#a855f7;">SW Mode</span>' : '<span class="badge" style="color:#10b981; border-color:#10b981;">⚡ Insta-Load</span>');
   info.innerHTML = `${engineBadge} <span class="badge">Format: ${f.ext.toUpperCase()}</span> <span class="badge">Size: ${formatSize(f.size)}</span>`;
   title.innerHTML = `${getIcon(f.name)} ${f.name}`;
   
@@ -388,6 +410,18 @@ async function viewFile(path) {
           const streamId = 'vid_' + Date.now();
           await registerStreamSW(streamId, { zipUrl, compression: f.compression, size: f.size, dataStart: f.dataStart, dataEnd: f.dataEnd, name: f.name });
           targetStreamUrl = window.location.pathname + `?sw_stream=${streamId}`;
+          
+          // Connect BroadcastChannel for UI updates
+          window.telemetryReceiver = new BroadcastChannel('sw-telemetry');
+          window.telemetryReceiver.onmessage = (e) => {
+              if (e.data && e.data.type === 'PROGRESS') {
+                  document.getElementById('telSpeed').textContent = `⚡ Speed: ${e.data.speed} MB/s`;
+                  const pct = e.data.total > 0 ? Math.round((e.data.loaded / e.data.total) * 100) : 0;
+                  document.getElementById('telProgress').textContent = `Buffer: ${formatSize(e.data.loaded)} / ${formatSize(e.data.total)} (${pct}%)`;
+                  document.getElementById('telBar').style.width = `${pct}%`;
+              }
+          };
+          telemetryDash.style.display = 'flex';
       } 
       else {
           if (windowUseSwMode) {
@@ -411,36 +445,29 @@ async function viewFile(path) {
 
       // --- RENDERING ---
       if (EXT.VIDEO.includes(ext)) {
-          container.innerHTML = `<video controls playsinline preload="auto"><source src="${targetStreamUrl}"></video>`;
+          // ✨ Fetchpriority & preload attributes added for Netflix-style loading speed
+          container.innerHTML = `<video controls playsinline preload="auto" fetchpriority="high"><source src="${targetStreamUrl}"></video>`;
           const vid = container.querySelector('video');
           
-          vid.onplaying = () => {
-              loading.style.display = 'none';
-          };
-          
-          vid.onerror = () => {
-              window.triggerAudioFallback(targetStreamUrl);
-          };
+          vid.onplaying = () => { loading.style.display = 'none'; };
+          vid.onerror = () => { window.triggerAudioFallback(targetStreamUrl); };
 
-          // ✨ THE FIX: Wait up to 8 seconds, but ONLY trigger if the video hasn't loaded data yet (readyState < 3).
           let stallSeconds = 0;
           window.deadlockWatchdog = setInterval(() => {
               if (vid.readyState >= 3) {
-                  clearInterval(window.deadlockWatchdog); // Success! Data is flowing.
+                  clearInterval(window.deadlockWatchdog); 
                   loading.style.display = 'none';
                   return;
               }
               stallSeconds++;
-              if (stallSeconds >= 8) { // 8 seconds patience
+              if (stallSeconds >= 8) { 
                   clearInterval(window.deadlockWatchdog);
-                  console.log("Watchdog triggered: Browser failed to decode within 8 seconds. Bypassing to Audio tag.");
                   window.triggerAudioFallback(targetStreamUrl);
               }
           }, 1000);
-
       } 
       else if (EXT.AUDIO.includes(ext)) {
-          container.innerHTML = `<div style="text-align:center;"><div style="font-size:4rem; margin-bottom:2rem;">🎵</div><audio controls autoplay style="width:80%; max-width:500px;"><source src="${targetStreamUrl}"></audio></div>`;
+          container.innerHTML = `<div style="text-align:center;"><div style="font-size:4rem; margin-bottom:2rem;">🎵</div><audio controls autoplay style="width:80%; max-width:500px;" fetchpriority="high"><source src="${targetStreamUrl}"></audio></div>`;
           loading.style.display = 'none';
       }
       else if (EXT.IMAGE.includes(ext)) {
@@ -488,8 +515,10 @@ window.switchExcelSheet = function(sheetName, tabElement) {
 
 function closeViewer() { 
   if (window.deadlockWatchdog) clearInterval(window.deadlockWatchdog);
+  if (window.telemetryReceiver) { window.telemetryReceiver.close(); window.telemetryReceiver = null; }
   if (window.currentBlobUrl) { URL.revokeObjectURL(window.currentBlobUrl); window.currentBlobUrl = null; }
   document.getElementById('renderContainer').innerHTML = '';
+  document.getElementById('footerTelemetry').style.display = 'none';
   document.getElementById('viewerModal').classList.remove('show');
 }
 function escHtml(s) { return s.replace(/'/g, "\\'").replace(/"/g, '&quot;'); }
