@@ -79,6 +79,12 @@
   .img-viewer { max-width: 100%; max-height: 100%; object-fit: contain; }
   .pdf-viewer { width: 100%; height: 100%; border: none; background: #fff; }
   
+  /* Telemetry Dashboard Style */
+  .telemetry-panel { background: rgba(24, 24, 27, 0.9); border: 1px solid var(--border); border-radius: 10px; padding: 0.9rem 1.2rem; width: 100%; max-width: 650px; font-family: var(--font-mono); font-size: 0.78rem; color: var(--text); box-shadow: 0 4px 20px rgba(0,0,0,0.4); }
+  .telemetry-row { display: flex; justify-content: space-between; margin-bottom: 0.4rem; }
+  .progress-bar-bg { background: rgba(255,255,255,0.08); width: 100%; height: 6px; border-radius: 4px; overflow: hidden; margin: 0.4rem 0; }
+  .progress-bar-fill { background: linear-gradient(90deg, var(--accent), var(--accent2)); width: 0%; height: 100%; transition: width 0.2s ease; }
+
   /* MS Office Viewer container */
   .office-container { width: 100%; height: 100%; background: #f3f4f6; color: #111827; display: flex; flex-direction: column; overflow: hidden; }
   .office-doc { background: #fff; margin: 1.5rem auto; width: 95%; max-width: 900px; min-height: 100%; padding: 3rem; box-shadow: 0 4px 15px rgba(0,0,0,0.1); border-radius: 6px; font-family: 'Calibri', 'Arial', sans-serif; line-height: 1.5; overflow: auto; }
@@ -360,6 +366,25 @@ function toggleEngine() {
     }
 }
 
+// Global Audio Fallback Action
+window.forceAudioFallback = function(streamUrl) {
+    const container = document.getElementById('renderContainer');
+    showToast("🎵 Audio Only Fallback Mode Active!", 4000);
+    container.innerHTML = `
+      <div style="width:100%; height:100%; background:#050505; display:flex; flex-direction:column; justify-content:center; align-items:center; gap:20px; padding:2rem;">
+          <div style="color:var(--accent); font-size:5rem; animation: spin 5s linear infinite;">🎵</div>
+          <div style="color:#text; text-align:center; font-family:var(--font-sans); font-size:0.9rem; max-width:500px;">
+              <b>Audio-Only Fallback Active</b><br>
+              <span style="color:var(--muted); font-size:0.8rem;">PC video decoder incompatible with this format. Audio pipeline fully active.</span>
+          </div>
+          <audio controls autoplay style="width:80%; max-width:600px; outline:none;">
+              <source src="${streamUrl}">
+          </audio>
+      </div>`;
+    const loading = document.getElementById('viewerLoading');
+    if (loading) loading.style.display = 'none';
+};
+
 async function viewFile(path) {
   window.currentViewingPath = path;
   const f = allFiles.find(file => file.path === path); if (!f) return;
@@ -372,7 +397,7 @@ async function viewFile(path) {
   const loadingTxt = document.getElementById('loadingText');
   const toggleWrap = document.getElementById('engineToggleWrap');
   
-  // Cleanup memory
+  if (window.telemetryReceiver) { window.telemetryReceiver.close(); window.telemetryReceiver = null; }
   if (window.currentBlobUrl) { URL.revokeObjectURL(window.currentBlobUrl); window.currentBlobUrl = null; }
   container.innerHTML = '';
   
@@ -404,7 +429,6 @@ async function viewFile(path) {
           info.innerHTML += ` <span class="badge warn">🔒 Macros Disabled (View Only)</span>`;
       }
 
-      // --- ENGINE SELECTION ---
       let targetStreamUrl = '';
       let targetArrayBuffer = null;
 
@@ -452,23 +476,72 @@ async function viewFile(path) {
 
       // --- RENDERING PHASE ---
       if (EXT.VIDEO.includes(ext)) {
-          container.innerHTML = `<video controls playsinline preload="auto"><source src="${targetStreamUrl}"></video>`;
+          container.innerHTML = `
+            <div style="display:flex; flex-direction:column; width:100%; height:100%; align-items:center; justify-content:center; gap:12px; padding:1rem; overflow-y:auto;">
+                <video controls playsinline preload="auto" style="max-height:58%; width:100%; border-radius:8px; background:#000;">
+                    <source src="${targetStreamUrl}">
+                </video>
+                <div class="telemetry-panel">
+                    <div class="telemetry-row">
+                        <span>Stream Status:</span>
+                        <span id="telStatus" style="color:var(--warn)">Connecting to cloud source...</span>
+                    </div>
+                    <div class="telemetry-row">
+                        <span>Download Speed:</span>
+                        <span id="telSpeed" style="color:var(--accent)">0.00 MBps</span>
+                    </div>
+                    <div class="telemetry-row">
+                        <span>Buffer Block Loaded:</span>
+                        <span id="telProgress">0 B / 0 B (0%)</span>
+                    </div>
+                    <div class="progress-bar-bg">
+                        <div class="progress-bar-fill" id="telBar"></div>
+                    </div>
+                    <div style="margin-top:0.6rem; display:flex; justify-content:space-between; align-items:center;">
+                        <span style="color:var(--muted); font-size:0.7rem;">Pipeline: Multi-threaded Resilient Stream</span>
+                        <button class="btn btn-sm btn-view" style="background:rgba(234,179,8,0.1); color:var(--warn); border:1px solid rgba(234,179,8,0.2);" onclick="forceAudioFallback('${escHtml(targetStreamUrl)}')">🎵 Force Audio Mode</button>
+                    </div>
+                </div>
+            </div>`;
+
           const vid = container.querySelector('video');
-          vid.oncanplay = () => loading.style.display = 'none';
           
-          // ✨ NEW LOGIC: PC Codec Fallback
-          vid.onerror = () => {
-              loading.style.display = 'none';
-              showToast("⚠️ Video Format Not Supported on PC. Switching to Audio Player...", 4000);
-              container.innerHTML = `
-                <div style="width:100%; height:100%; background:#000; display:flex; flex-direction:column; justify-content:center; align-items:center;">
-                    <div style="color:var(--accent); font-size:4rem; margin-bottom:1rem;">🎵</div>
-                    <div style="color:#fff; margin-bottom: 2rem; font-family:var(--font-sans); font-size:0.9rem;">Audio Mode Active (Video Codec Unsupported)</div>
-                    <audio controls autoplay style="width:80%; max-width:600px; outline:none;">
-                        <source src="${targetStreamUrl}">
-                    </audio>
-                </div>`;
+          // Connect Real-time Telemetry Channel
+          window.telemetryReceiver = new BroadcastChannel('sw-telemetry');
+          window.telemetryReceiver.onmessage = (e) => {
+              if (e.data && e.data.type === 'PROGRESS') {
+                  const sLabel = document.getElementById('telStatus');
+                  const spLabel = document.getElementById('telSpeed');
+                  const pLabel = document.getElementById('telProgress');
+                  const bar = document.getElementById('telBar');
+                  
+                  if(sLabel && vid.paused === false) { sLabel.textContent = "▶ Streaming Smoothly"; sLabel.style.color = "var(--accent3)"; }
+                  if(spLabel) spLabel.textContent = `${e.data.speed} MBps`;
+                  if(pLabel) {
+                      const pct = e.data.total > 0 ? Math.round((e.data.loaded / e.data.total) * 100) : 0;
+                      pLabel.textContent = `${formatSize(e.data.loaded)} / ${formatSize(e.data.total)} (${pct}%)`;
+                      if(bar) bar.style.width = `${pct}%`;
+                  }
+              }
           };
+
+          vid.oncanplay = () => { loading.style.display = 'none'; };
+          vid.onplaying = () => { loading.style.display = 'none'; };
+          vid.onwaiting = () => {
+              const sLabel = document.getElementById('telStatus');
+              if(sLabel) { sLabel.textContent = "⏳ Buffering background range data..."; sLabel.style.color = "var(--warn)"; }
+          };
+
+          vid.onerror = () => { forceAudioFallback(targetStreamUrl); };
+
+          // Smart Stall Watchdog (Auto recommendations for PC codec limits)
+          let stallCheck = setTimeout(() => {
+              if (vid.currentTime === 0 && !vid.paused) {
+                  const sLabel = document.getElementById('telStatus');
+                  if (sLabel) { sLabel.textContent = "⚠️ Browser stalling video stream. Codec failure suspected."; sLabel.style.color = "var(--danger)"; }
+              }
+          }, 6500);
+          vid.onplay = () => { clearTimeout(stallCheck); };
       } 
       else if (EXT.AUDIO.includes(ext)) {
           container.innerHTML = `<div style="text-align:center; width:100%;"><div style="font-size:4rem; margin-bottom:2rem;">🎵</div><audio controls autoplay style="width:80%; max-width:500px;"><source src="${targetStreamUrl}"></audio></div>`;
@@ -547,6 +620,7 @@ window.switchExcelSheet = function(sheetName, tabElement) {
 };
 
 function closeViewer() { 
+  if (window.telemetryReceiver) { window.telemetryReceiver.close(); window.telemetryReceiver = null; }
   if (window.currentBlobUrl) { URL.revokeObjectURL(window.currentBlobUrl); window.currentBlobUrl = null; }
   document.getElementById('renderContainer').innerHTML = '';
   document.getElementById('viewerModal').classList.remove('show');
