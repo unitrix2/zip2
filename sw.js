@@ -36,11 +36,8 @@ async function handleStreamRequest(request, f, urlObj) {
     try {
         const rangeHeader = request.headers.get('Range');
         const isDownload = urlObj.searchParams.get('dl') === '1';
-        
-        // ✨ THE FIX: Detect if this is an audio fallback request
         const isAudioFallback = urlObj.searchParams.get('audio_fallback') === '1';
         
-        // Dynamically spoof MIME type to trick PC browsers into Audio-Only pipeline
         let mime = getMimeType(f.name);
         if (isAudioFallback && mime.startsWith('video/')) {
             mime = mime.replace('video/', 'audio/');
@@ -68,8 +65,52 @@ async function handleStreamRequest(request, f, urlObj) {
             fetchHeaders.set('Range', `bytes=${reqStart}-${reqEnd}`);
             
             const res = await fetch(f.zipUrl, { headers: fetchHeaders });
-            
             if (!res.ok) throw new Error("Server rejected proxy request.");
+
+            // ✨ TURBO PIPELINE: Wrap stream to aggressively pull chunks and calculate live telemetry
+            const reader = res.body.getReader();
+            const telemetryChannel = new BroadcastChannel('sw-telemetry');
+            
+            const stream = new ReadableStream({
+                async start(controller) {
+                    let loadedSinceLast = 0;
+                    let lastTime = Date.now();
+                    let totalLoaded = 0;
+                    const totalBytes = reqEnd - reqStart + 1;
+
+                    try {
+                        while (true) {
+                            const { done, value } = await reader.read();
+                            if (done) {
+                                controller.close();
+                                break;
+                            }
+                            controller.enqueue(value);
+                            
+                            loadedSinceLast += value.byteLength;
+                            totalLoaded += value.byteLength;
+                            
+                            const now = Date.now();
+                            if (now - lastTime > 400) {
+                                const speedMBps = (loadedSinceLast / (1024 * 1024)) / ((now - lastTime) / 1000);
+                                telemetryChannel.postMessage({
+                                    type: 'PROGRESS',
+                                    speed: speedMBps.toFixed(2),
+                                    loaded: totalLoaded,
+                                    total: totalBytes
+                                });
+                                lastTime = now;
+                                loadedSinceLast = 0;
+                            }
+                        }
+                    } catch (err) {
+                        controller.error(err);
+                    }
+                },
+                cancel(reason) {
+                    reader.cancel(reason); // Fixes Deadlocks if browser skips ahead
+                }
+            });
 
             const resHeaders = new Headers();
             resHeaders.set('Access-Control-Allow-Origin', '*');
@@ -78,19 +119,19 @@ async function handleStreamRequest(request, f, urlObj) {
                 resHeaders.set('Content-Disposition', `attachment; filename="${encodeURIComponent(f.name)}"`);
                 resHeaders.set('Content-Type', 'application/octet-stream');
                 resHeaders.set('Content-Length', f.size.toString());
-                return new Response(res.body, { status: 200, headers: resHeaders });
+                return new Response(stream, { status: 200, headers: resHeaders });
             } else {
-                resHeaders.set('Content-Type', mime); // Spoofed or Original MIME
+                resHeaders.set('Content-Type', mime);
                 resHeaders.set('Accept-Ranges', 'bytes');
                 
                 if (rangeHeader) {
                     resHeaders.set('Content-Range', `bytes ${start}-${end}/${f.size}`);
                     resHeaders.set('Content-Length', (end - start + 1).toString());
-                    return new Response(res.body, { status: 206, headers: resHeaders });
+                    return new Response(stream, { status: 206, headers: resHeaders });
                 }
                 
                 resHeaders.set('Content-Length', f.size.toString());
-                return new Response(res.body, { status: 200, headers: resHeaders });
+                return new Response(stream, { status: 200, headers: resHeaders });
             }
         } 
         else {
