@@ -37,7 +37,6 @@ async function handleStreamRequest(request, f, isDownload) {
     let start = 0;
     let end = f.size - 1;
 
-    // Parse requested byte range from the browser's video player
     if (rangeHeader) {
         const match = rangeHeader.match(/bytes=(\d+)-(\d*)/);
         if (match) {
@@ -50,63 +49,88 @@ async function handleStreamRequest(request, f, isDownload) {
         let actualStart = f.dataStart;
         let actualEnd = f.dataEnd;
 
-        // Perfect mapping for 'Stored' media files
         if (f.compression === 0) {
             actualStart = f.dataStart + start;
             actualEnd = f.dataStart + end;
         }
 
-        // ✨ NEW LOGIC: Auto-Reconnecting Stream Wrapper to fix 2GB cutoff bug
+        const telemetryChannel = new BroadcastChannel('sw-telemetry');
+        let abortCtrl = new AbortController();
+
         const resilientStream = new ReadableStream({
             async start(controller) {
                 let currentOffset = actualStart;
                 let retryCount = 0;
+                let lastTime = performance.now();
+                let loadedSinceLast = 0;
 
                 async function fetchNextChunk() {
-                    if (currentOffset > actualEnd) {
-                        controller.close();
+                    if (currentOffset > actualEnd || abortCtrl.signal.aborted) {
+                        try { controller.close(); } catch(e){}
                         return;
                     }
                     try {
                         const headers = new Headers();
                         headers.set('Range', `bytes=${currentOffset}-${actualEnd}`);
-                        const res = await fetch(f.zipUrl, { headers });
+                        const res = await fetch(f.zipUrl, { headers, signal: abortCtrl.signal });
                         
                         if (!res.ok) throw new Error(`HTTP Error: ${res.status}`);
                         
                         const reader = res.body.getReader();
-                        retryCount = 0; // Reset retries on successful connection
+                        retryCount = 0;
 
                         while (true) {
+                            if (abortCtrl.signal.aborted) {
+                                try { reader.releaseLock(); } catch(e){}
+                                break;
+                            }
                             const { done, value } = await reader.read();
-                            if (done) break; // Network cut the connection or finished naturally
+                            if (done) break;
+                            
                             controller.enqueue(value);
                             currentOffset += value.byteLength;
+                            loadedSinceLast += value.byteLength;
+
+                            // Calculate and Dispatch Real-Time Telemetry Stats
+                            let now = performance.now();
+                            if (now - lastTime >= 400) {
+                                let duration = (now - lastTime) / 1000;
+                                let speedMBps = (loadedSinceLast / (1024 * 1024)) / duration;
+                                telemetryChannel.postMessage({
+                                    type: 'PROGRESS',
+                                    loaded: currentOffset - actualStart,
+                                    total: actualEnd - actualStart + 1,
+                                    speed: speedMBps.toFixed(2)
+                                });
+                                lastTime = now;
+                                loadedSinceLast = 0;
+                            }
                         }
                         
-                        // If connection drops before finishing, fetch the remaining silently
-                        if (currentOffset <= actualEnd) {
+                        if (currentOffset <= actualEnd && !abortCtrl.signal.aborted) {
                             fetchNextChunk();
                         } else {
-                            controller.close();
+                            try { controller.close(); } catch(e){}
                         }
                     } catch (e) {
+                        if (abortCtrl.signal.aborted) return;
                         retryCount++;
                         if (retryCount > 5) {
-                            controller.error(e);
+                            try { controller.error(e); } catch(err){}
                             return;
                         }
-                        // Short delay before reconnecting on network error
                         setTimeout(fetchNextChunk, 1000);
                     }
                 }
                 fetchNextChunk();
+            },
+            cancel(reason) {
+                // ✨ Critical Abort Signal Triggered on Browser Stream Switch/Disconnect
+                abortCtrl.abort();
             }
         });
 
         let finalStream = resilientStream;
-        
-        // Deflated files stream through decompression engine
         if (f.compression === 8) {
             finalStream = finalStream.pipeThrough(new DecompressionStream('deflate-raw'));
         }
