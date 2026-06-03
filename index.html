@@ -74,17 +74,11 @@
   .viewer-body { position: relative; flex: 1; background: #050505; display: flex; align-items: center; justify-content: center; overflow: hidden; }
   
   /* Media Specific Styles */
-  video { width: 100%; height: 100%; outline: none; background: #000; transform: translateZ(0); will-change: transform; backface-visibility: hidden; }
+  video { width: 100%; height: 100%; outline: none; background: #000; }
   audio { width: 80%; max-width: 600px; outline: none; }
   .img-viewer { max-width: 100%; max-height: 100%; object-fit: contain; }
   .pdf-viewer { width: 100%; height: 100%; border: none; background: #fff; }
   
-  /* Telemetry Dashboard Style */
-  .telemetry-panel { background: rgba(24, 24, 27, 0.9); border: 1px solid var(--border); border-radius: 10px; padding: 0.9rem 1.2rem; width: 100%; max-width: 650px; font-family: var(--font-mono); font-size: 0.78rem; color: var(--text); box-shadow: 0 4px 20px rgba(0,0,0,0.4); }
-  .telemetry-row { display: flex; justify-content: space-between; margin-bottom: 0.4rem; }
-  .progress-bar-bg { background: rgba(255,255,255,0.08); width: 100%; height: 6px; border-radius: 4px; overflow: hidden; margin: 0.4rem 0; }
-  .progress-bar-fill { background: linear-gradient(90deg, var(--accent), var(--accent2)); width: 0%; height: 100%; transition: width 0.2s ease; }
-
   /* MS Office Viewer container */
   .office-container { width: 100%; height: 100%; background: #f3f4f6; color: #111827; display: flex; flex-direction: column; overflow: hidden; }
   .office-doc { background: #fff; margin: 1.5rem auto; width: 95%; max-width: 900px; min-height: 100%; padding: 3rem; box-shadow: 0 4px 15px rgba(0,0,0,0.1); border-radius: 6px; font-family: 'Calibri', 'Arial', sans-serif; line-height: 1.5; overflow: auto; }
@@ -98,7 +92,6 @@
   table.excel-table { width: max-content; min-width: 100%; border-collapse: collapse; font-family: 'Calibri', sans-serif; font-size: 0.85rem; }
   table.excel-table th, table.excel-table td { border: 1px solid #d4d4d4; padding: 4px 8px; white-space: nowrap; color: #000; }
   table.excel-table tr:first-child { background: #f3f3f3; font-weight: bold; text-align: center; position: sticky; top: 0; box-shadow: 0 1px 0 #d4d4d4; z-index: 10; }
-  table.excel-table tr:hover { background-color: #f9f9f9; }
 
   /* Loading State */
   .viewer-loading { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; background: rgba(5,5,5,0.9); z-index: 10; gap: 1rem; color: var(--muted); font-size: 0.9rem; }
@@ -217,22 +210,7 @@ const EXT = {
 };
 
 function getExt(name) { return (name.split('.').pop() || '').toLowerCase(); }
-function getMimeType(name) {
-    const ext = getExt(name);
-    const map = {
-        'mp4': 'video/mp4', 'mkv': 'video/mp4', 'avi': 'video/mp4', 'webm': 'video/webm',
-        'mp3': 'audio/mpeg', 'ogg': 'audio/ogg', 'wav': 'audio/wav',
-        'jpg': 'image/jpeg', 'jpeg': 'image/jpeg', 'png': 'image/png', 'gif': 'image/gif', 'webp': 'image/webp',
-        'pdf': 'application/pdf',
-        'xlsx': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-        'xls': 'application/vnd.ms-excel',
-        'xlsm': 'application/vnd.ms-excel.sheet.macroEnabled.12',
-        'csv': 'text/csv',
-        'docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-        'doc': 'application/msword'
-    };
-    return map[ext] || 'application/octet-stream';
-}
+function formatSize(bytes) { if (!bytes) return '—'; const u = ['B','KB','MB','GB']; let i=0; while(bytes>=1024 && i<3){bytes/=1024; i++;} return bytes.toFixed(1) + ' ' + u[i]; }
 function getIcon(name) { 
     const ext = getExt(name); 
     if(EXT.VIDEO.includes(ext)) return '🎬'; 
@@ -243,7 +221,6 @@ function getIcon(name) {
     return '📦'; 
 }
 function canView(name) { return Object.values(EXT).some(arr => arr.includes(getExt(name))); }
-function formatSize(bytes) { if (!bytes) return '—'; const u = ['B','KB','MB','GB']; let i=0; while(bytes>=1024 && i<3){bytes/=1024; i++;} return bytes.toFixed(1) + ' ' + u[i]; }
 
 let zipUrl = ''; let zipSize = 0; let allFiles = [];
 
@@ -261,7 +238,7 @@ function safeDecode(bytes) { try { return new TextDecoder('utf-8').decode(bytes)
 
 async function loadZip() {
   const url = document.getElementById('zipUrl').value.trim();
-  if (!url) { showToast('❌ Error: URL is required!'); return; }
+  if (!url) return;
   zipUrl = url; 
   document.getElementById('explorer').classList.remove('show');
   showToast('🔄 Reading ZIP...', 2000);
@@ -270,7 +247,6 @@ async function loadZip() {
     const initRes = await fetch(zipUrl, { headers: { 'Range': 'bytes=0-0' } });
     if (!initRes.ok) throw new Error("CORS or Proxy blocked.");
     const cr = initRes.headers.get('content-range');
-    if(!cr) throw new Error("Server does not support Range Requests.");
     
     zipSize = parseInt(cr.split('/').pop(), 10);
     const tailSize = Math.min(65536 + 100, zipSize);
@@ -337,7 +313,7 @@ async function prepareFileData(f) {
     return f;
 }
 
-// ─── Native Download Trigger ───
+// ─── Download File ───
 async function downloadFile(path) {
   const f = allFiles.find(file => file.path === path); if (!f) return;
   showToast(`🚀 Sending "${f.name}" to browser downloads...`);
@@ -353,36 +329,43 @@ async function downloadFile(path) {
   } catch(e) { showToast(`❌ Error: ${e.message}`); }
 }
 
-// ─── Dual Engine View Logic ───
 let windowUseSwMode = false;
 window.currentViewingPath = null;
 window.currentBlobUrl = null;
 
 function toggleEngine() {
     windowUseSwMode = document.getElementById('engineToggle').checked;
-    if (window.currentViewingPath) {
-        showToast(windowUseSwMode ? "♻️ Reloading with SW Engine..." : "⚡ Reloading with Insta-Load...", 1500);
-        viewFile(window.currentViewingPath);
-    }
+    if (window.currentViewingPath) viewFile(window.currentViewingPath);
 }
 
-// Global Audio Fallback Action
-window.forceAudioFallback = function(streamUrl) {
+// Smart Codec Fallback Trigger
+window.triggerAudioFallback = function(streamUrl) {
     const container = document.getElementById('renderContainer');
-    showToast("🎵 Audio Only Fallback Mode Active!", 4000);
     container.innerHTML = `
-      <div style="width:100%; height:100%; background:#050505; display:flex; flex-direction:column; justify-content:center; align-items:center; gap:20px; padding:2rem;">
-          <div style="color:var(--accent); font-size:5rem; animation: spin 5s linear infinite;">🎵</div>
-          <div style="color:#text; text-align:center; font-family:var(--font-sans); font-size:0.9rem; max-width:500px;">
-              <b>Audio-Only Fallback Active</b><br>
-              <span style="color:var(--muted); font-size:0.8rem;">PC video decoder incompatible with this format. Audio pipeline fully active.</span>
+      <div style="width:100%; height:100%; display:flex; flex-direction:column; justify-content:center; align-items:center; gap:20px; text-align:center;">
+          <div style="font-size:3rem;">🎵</div>
+          <div style="color:var(--warn); font-family:var(--font-sans); font-size:0.95rem;">
+              <b>Video Codec Unsupported on PC</b><br>
+              <span style="font-size:0.8rem; color:var(--muted);">Attempting to play audio track. If this fails too, please Download the file.</span>
           </div>
-          <audio controls autoplay style="width:80%; max-width:600px; outline:none;">
+          <audio controls autoplay style="width:80%; max-width:600px;">
               <source src="${streamUrl}">
           </audio>
       </div>`;
-    const loading = document.getElementById('viewerLoading');
-    if (loading) loading.style.display = 'none';
+    
+    // Test if even Audio fails
+    const aud = container.querySelector('audio');
+    aud.onerror = () => {
+        container.innerHTML = `
+          <div style="text-align:center; padding:2rem;">
+              <div style="font-size:3rem; margin-bottom:1rem;">❌</div>
+              <div style="color:var(--danger); font-size:1rem; font-weight:bold;">Format Completely Unsupported</div>
+              <div style="color:var(--muted); font-size:0.85rem; margin-top:10px; max-width:400px; line-height:1.5;">
+                  Your PC browser lacks the licensing to decode this media file (likely MKV/AC3/HEVC). Mobile browsers usually support this natively. <br><br>
+                  <b>Please use the Download button to play it in VLC Player.</b>
+              </div>
+          </div>`;
+    };
 };
 
 async function viewFile(path) {
@@ -397,17 +380,11 @@ async function viewFile(path) {
   const loadingTxt = document.getElementById('loadingText');
   const toggleWrap = document.getElementById('engineToggleWrap');
   
-  if (window.telemetryReceiver) { window.telemetryReceiver.close(); window.telemetryReceiver = null; }
   if (window.currentBlobUrl) { URL.revokeObjectURL(window.currentBlobUrl); window.currentBlobUrl = null; }
   container.innerHTML = '';
   
   const ext = f.ext;
-  
-  if (EXT.VIDEO.includes(ext) || EXT.AUDIO.includes(ext)) {
-      toggleWrap.style.display = 'none';
-  } else {
-      toggleWrap.style.display = 'flex'; 
-  }
+  toggleWrap.style.display = (EXT.VIDEO.includes(ext) || EXT.AUDIO.includes(ext)) ? 'none' : 'flex';
 
   const engineBadge = (EXT.VIDEO.includes(ext) || EXT.AUDIO.includes(ext)) ? '<span class="badge" style="color:#38bdf8; border-color:#38bdf8;">Native Stream</span>' : (windowUseSwMode ? '<span class="badge" style="color:#a855f7; border-color:#a855f7;">SW Mode</span>' : '<span class="badge" style="color:#10b981; border-color:#10b981;">⚡ Insta-Load</span>');
   info.innerHTML = `${engineBadge} <span class="badge">Format: ${f.ext.toUpperCase()}</span> <span class="badge">Size: ${formatSize(f.size)}</span>`;
@@ -422,129 +399,58 @@ async function viewFile(path) {
   try {
       await prepareFileData(f);
       
-      if (EXT.VIDEO.includes(ext) && f.compression !== 0) {
-          info.innerHTML += ` <span class="badge warn">⚠️ Compressed Video (May stutter)</span>`;
-      }
-      if (ext === 'xlsm') {
-          info.innerHTML += ` <span class="badge warn">🔒 Macros Disabled (View Only)</span>`;
-      }
-
       let targetStreamUrl = '';
       let targetArrayBuffer = null;
 
       if (EXT.VIDEO.includes(ext) || EXT.AUDIO.includes(ext)) {
-          loadingTxt.textContent = "Buffering Stream...";
+          loadingTxt.textContent = "Connecting to source...";
           const streamId = 'vid_' + Date.now();
           await registerStreamSW(streamId, { zipUrl, compression: f.compression, size: f.size, dataStart: f.dataStart, dataEnd: f.dataEnd, name: f.name });
           targetStreamUrl = window.location.pathname + `?sw_stream=${streamId}`;
       } 
       else {
+          // Documents handling...
           if (windowUseSwMode) {
-              loadingTxt.textContent = "Loading via SW Engine...";
               const streamId = 'doc_' + Date.now();
               await registerStreamSW(streamId, { zipUrl, compression: f.compression, size: f.size, dataStart: f.dataStart, dataEnd: f.dataEnd, name: f.name });
               targetStreamUrl = window.location.pathname + `?sw_stream=${streamId}`;
-              
-              if (EXT.OFFICE.includes(ext)) {
-                  const res = await fetch(targetStreamUrl);
-                  targetArrayBuffer = await res.arrayBuffer();
-              }
+              if (EXT.OFFICE.includes(ext)) { const res = await fetch(targetStreamUrl); targetArrayBuffer = await res.arrayBuffer(); }
           } else {
-              loadingTxt.textContent = "Insta-Loading to RAM...";
-              const fetchHeaders = new Headers();
-              fetchHeaders.set('Range', `bytes=${f.dataStart}-${f.dataEnd}`);
-              
+              const fetchHeaders = new Headers(); fetchHeaders.set('Range', `bytes=${f.dataStart}-${f.dataEnd}`);
               const directRes = await fetch(zipUrl, { headers: fetchHeaders });
-              if (!directRes.ok) throw new Error("Server blocked direct read.");
-              
-              let memoryStream = directRes.body;
-              if (f.compression === 8) {
-                  memoryStream = memoryStream.pipeThrough(new DecompressionStream('deflate-raw'));
-              }
+              let memoryStream = f.compression === 8 ? directRes.body.pipeThrough(new DecompressionStream('deflate-raw')) : directRes.body;
               const decompressedRes = new Response(memoryStream);
               
               if (EXT.IMAGE.includes(ext) || EXT.PDF.includes(ext)) {
                   const blob = await decompressedRes.blob();
-                  const typedBlob = new Blob([blob], { type: getMimeType(f.name) });
-                  targetStreamUrl = URL.createObjectURL(typedBlob);
-                  window.currentBlobUrl = targetStreamUrl; 
-              } else if (EXT.OFFICE.includes(ext)) {
-                  targetArrayBuffer = await decompressedRes.arrayBuffer();
-              }
+                  window.currentBlobUrl = URL.createObjectURL(new Blob([blob], { type: 'application/octet-stream' }));
+                  targetStreamUrl = window.currentBlobUrl; 
+              } else if (EXT.OFFICE.includes(ext)) { targetArrayBuffer = await decompressedRes.arrayBuffer(); }
           }
       }
 
-      // --- RENDERING PHASE ---
+      // --- RENDERING ---
       if (EXT.VIDEO.includes(ext)) {
-          container.innerHTML = `
-            <div style="display:flex; flex-direction:column; width:100%; height:100%; align-items:center; justify-content:center; gap:12px; padding:1rem; overflow-y:auto;">
-                <video controls playsinline preload="auto" style="max-height:58%; width:100%; border-radius:8px; background:#000;">
-                    <source src="${targetStreamUrl}">
-                </video>
-                <div class="telemetry-panel">
-                    <div class="telemetry-row">
-                        <span>Stream Status:</span>
-                        <span id="telStatus" style="color:var(--warn)">Connecting to cloud source...</span>
-                    </div>
-                    <div class="telemetry-row">
-                        <span>Download Speed:</span>
-                        <span id="telSpeed" style="color:var(--accent)">0.00 MBps</span>
-                    </div>
-                    <div class="telemetry-row">
-                        <span>Buffer Block Loaded:</span>
-                        <span id="telProgress">0 B / 0 B (0%)</span>
-                    </div>
-                    <div class="progress-bar-bg">
-                        <div class="progress-bar-fill" id="telBar"></div>
-                    </div>
-                    <div style="margin-top:0.6rem; display:flex; justify-content:space-between; align-items:center;">
-                        <span style="color:var(--muted); font-size:0.7rem;">Pipeline: Multi-threaded Resilient Stream</span>
-                        <button class="btn btn-sm btn-view" style="background:rgba(234,179,8,0.1); color:var(--warn); border:1px solid rgba(234,179,8,0.2);" onclick="forceAudioFallback('${escHtml(targetStreamUrl)}')">🎵 Force Audio Mode</button>
-                    </div>
-                </div>
-            </div>`;
-
+          container.innerHTML = `<video controls playsinline preload="auto"><source src="${targetStreamUrl}"></video>`;
           const vid = container.querySelector('video');
           
-          // Connect Real-time Telemetry Channel
-          window.telemetryReceiver = new BroadcastChannel('sw-telemetry');
-          window.telemetryReceiver.onmessage = (e) => {
-              if (e.data && e.data.type === 'PROGRESS') {
-                  const sLabel = document.getElementById('telStatus');
-                  const spLabel = document.getElementById('telSpeed');
-                  const pLabel = document.getElementById('telProgress');
-                  const bar = document.getElementById('telBar');
-                  
-                  if(sLabel && vid.paused === false) { sLabel.textContent = "▶ Streaming Smoothly"; sLabel.style.color = "var(--accent3)"; }
-                  if(spLabel) spLabel.textContent = `${e.data.speed} MBps`;
-                  if(pLabel) {
-                      const pct = e.data.total > 0 ? Math.round((e.data.loaded / e.data.total) * 100) : 0;
-                      pLabel.textContent = `${formatSize(e.data.loaded)} / ${formatSize(e.data.total)} (${pct}%)`;
-                      if(bar) bar.style.width = `${pct}%`;
-                  }
+          vid.oncanplay = () => loading.style.display = 'none';
+          vid.onplaying = () => loading.style.display = 'none';
+          
+          // Smart Error Detection
+          vid.onerror = (e) => {
+              loading.style.display = 'none';
+              const err = vid.error;
+              // Code 4 is MEDIA_ERR_SRC_NOT_SUPPORTED (Codec issue)
+              if (err && err.code === 4) {
+                  window.triggerAudioFallback(targetStreamUrl);
+              } else {
+                  container.innerHTML = `<div style="color:var(--danger)">Network Error while streaming video. Check connection.</div>`;
               }
           };
-
-          vid.oncanplay = () => { loading.style.display = 'none'; };
-          vid.onplaying = () => { loading.style.display = 'none'; };
-          vid.onwaiting = () => {
-              const sLabel = document.getElementById('telStatus');
-              if(sLabel) { sLabel.textContent = "⏳ Buffering background range data..."; sLabel.style.color = "var(--warn)"; }
-          };
-
-          vid.onerror = () => { forceAudioFallback(targetStreamUrl); };
-
-          // Smart Stall Watchdog (Auto recommendations for PC codec limits)
-          let stallCheck = setTimeout(() => {
-              if (vid.currentTime === 0 && !vid.paused) {
-                  const sLabel = document.getElementById('telStatus');
-                  if (sLabel) { sLabel.textContent = "⚠️ Browser stalling video stream. Codec failure suspected."; sLabel.style.color = "var(--danger)"; }
-              }
-          }, 6500);
-          vid.onplay = () => { clearTimeout(stallCheck); };
       } 
       else if (EXT.AUDIO.includes(ext)) {
-          container.innerHTML = `<div style="text-align:center; width:100%;"><div style="font-size:4rem; margin-bottom:2rem;">🎵</div><audio controls autoplay style="width:80%; max-width:500px;"><source src="${targetStreamUrl}"></audio></div>`;
+          container.innerHTML = `<div style="text-align:center;"><div style="font-size:4rem; margin-bottom:2rem;">🎵</div><audio controls autoplay style="width:80%; max-width:500px;"><source src="${targetStreamUrl}"></audio></div>`;
           loading.style.display = 'none';
       }
       else if (EXT.IMAGE.includes(ext)) {
@@ -556,85 +462,51 @@ async function viewFile(path) {
           loading.style.display = 'none';
       }
       else if (EXT.OFFICE.includes(ext)) {
-          if (!targetArrayBuffer) throw new Error("Data Buffer Empty.");
-          
+          // Document Renderers...
+          loading.style.display = 'none';
           if (['xls', 'xlsx', 'xlsm', 'csv'].includes(ext)) {
-              loadingTxt.textContent = "Rendering Excel Sheets...";
               while(typeof XLSX === 'undefined') { await new Promise(r => setTimeout(r, 100)); }
-              
               const wb = XLSX.read(targetArrayBuffer, {type: 'array'});
               window.currentExcelWb = wb; 
               
               let tabsHtml = '<div class="excel-tabs">';
-              wb.SheetNames.forEach((sheetName, index) => {
-                  tabsHtml += `<div class="excel-tab ${index === 0 ? 'active' : ''}" onclick="switchExcelSheet('${escHtml(sheetName)}', this)">${sheetName}</div>`;
-              });
+              wb.SheetNames.forEach((sheetName, index) => { tabsHtml += `<div class="excel-tab ${index === 0 ? 'active' : ''}" onclick="switchExcelSheet('${escHtml(sheetName)}', this)">${sheetName}</div>`; });
               tabsHtml += '</div>';
               
-              const firstSheet = wb.Sheets[wb.SheetNames[0]];
-              const tableHtml = XLSX.utils.sheet_to_html(firstSheet, { id: "rendered-excel" });
-              
-              container.innerHTML = `
-                <div class="office-container">
-                    <div class="excel-wrapper" id="excelDataContainer">${tableHtml}</div>
-                    ${tabsHtml}
-                </div>
-              `;
-              
-              const table = document.getElementById('rendered-excel');
-              if(table) table.className = "excel-table";
+              const tableHtml = XLSX.utils.sheet_to_html(wb.Sheets[wb.SheetNames[0]], { id: "rendered-excel" });
+              container.innerHTML = `<div class="office-container"><div class="excel-wrapper" id="excelDataContainer">${tableHtml}</div>${tabsHtml}</div>`;
+              document.getElementById('rendered-excel').className = "excel-table";
           } 
           else if (['doc', 'docx'].includes(ext)) {
-              loadingTxt.textContent = "Rendering Word Document...";
               while(typeof docx === 'undefined') { await new Promise(r => setTimeout(r, 100)); }
-              
               container.innerHTML = `<div class="office-container" style="overflow:auto;"><div class="office-doc" id="officeDocArea"></div></div>`;
-              try { await docx.renderAsync(targetArrayBuffer, document.getElementById('officeDocArea')); }
-              catch { container.innerHTML = `<div style="color:#fff;">Word render failed. Please download the file.</div>`; }
+              docx.renderAsync(targetArrayBuffer, document.getElementById('officeDocArea'));
           }
-          else if (['ppt', 'pptx'].includes(ext)) {
-              container.innerHTML = `<div style="color:#fff; text-align:center;">Presentation Viewer is not supported natively.<br>Please use the <b>Download</b> button below to open in MS PowerPoint.</div>`;
-          }
-          loading.style.display = 'none';
       }
-      
   } catch(e) {
       loading.style.display = 'none';
-      container.innerHTML = `<div style="color:var(--danger)">❌ Viewer Error: ${e.message}</div>`;
+      container.innerHTML = `<div style="color:var(--danger)">❌ Error: ${e.message}</div>`;
   }
 }
 
-// ─── Excel Sheet Switcher Logic ───
 window.switchExcelSheet = function(sheetName, tabElement) {
     if(!window.currentExcelWb) return;
-    
-    document.querySelectorAll('.excel-tab').forEach(tab => tab.classList.remove('active'));
+    document.querySelectorAll('.excel-tab').forEach(t => t.classList.remove('active'));
     tabElement.classList.add('active');
-    
-    const ws = window.currentExcelWb.Sheets[sheetName];
-    const tableHtml = XLSX.utils.sheet_to_html(ws, { id: "rendered-excel" });
-    document.getElementById('excelDataContainer').innerHTML = tableHtml;
-    
-    const table = document.getElementById('rendered-excel');
-    if(table) table.className = "excel-table";
+    document.getElementById('excelDataContainer').innerHTML = XLSX.utils.sheet_to_html(window.currentExcelWb.Sheets[sheetName], { id: "rendered-excel" });
+    document.getElementById('rendered-excel').className = "excel-table";
 };
 
 function closeViewer() { 
-  if (window.telemetryReceiver) { window.telemetryReceiver.close(); window.telemetryReceiver = null; }
   if (window.currentBlobUrl) { URL.revokeObjectURL(window.currentBlobUrl); window.currentBlobUrl = null; }
   document.getElementById('renderContainer').innerHTML = '';
   document.getElementById('viewerModal').classList.remove('show');
-  window.currentExcelWb = null; 
-  window.currentViewingPath = null;
 }
-
-// ─── Global UI ───
 function escHtml(s) { return s.replace(/'/g, "\\'").replace(/"/g, '&quot;'); }
 function filterFiles() { const q = document.getElementById('searchInput').value.toLowerCase(); renderFiles(allFiles.filter(f => f.path.toLowerCase().includes(q))); }
-
 function renderFiles(files) {
   const list = document.getElementById('fileList'); 
-  if (!files.length) { list.innerHTML = '<div style="padding:2rem;text-align:center;color:var(--muted);font-size:0.85rem;">No files found</div>'; return; }
+  if (!files.length) { list.innerHTML = '<div style="padding:2rem;text-align:center;color:var(--muted);">No files found</div>'; return; }
   list.innerHTML = files.map(f => `
     <div class="file-item">
       <div style="font-size:1.2rem; min-width:30px; text-align:center;">${getIcon(f.name)}</div>
@@ -646,16 +518,13 @@ function renderFiles(files) {
       </div>
     </div>`).join('');
 }
-
 function showToast(msg, duration = 4000) {
     const container = document.getElementById('toastContainer');
     const toast = document.createElement('div');
-    toast.className = 'toast';
-    toast.innerHTML = msg;
+    toast.className = 'toast'; toast.innerHTML = msg;
     container.appendChild(toast);
     setTimeout(() => { toast.classList.add('fadeOut'); setTimeout(() => toast.remove(), 400); }, duration);
 }
-
 document.getElementById('zipUrl').addEventListener('keydown', e => { if (e.key === 'Enter') loadZip(); });
 </script>
 </body>
