@@ -36,12 +36,7 @@ async function handleStreamRequest(request, f, urlObj) {
     try {
         const rangeHeader = request.headers.get('Range');
         const isDownload = urlObj.searchParams.get('dl') === '1';
-        const isAudioFallback = urlObj.searchParams.get('audio_fallback') === '1';
-        
         let mime = getMimeType(f.name);
-        if (isAudioFallback && mime.startsWith('video/')) {
-            mime = mime.replace('video/', 'audio/');
-        }
 
         if (f.compression === 0) {
             let start = 0;
@@ -67,48 +62,47 @@ async function handleStreamRequest(request, f, urlObj) {
             const res = await fetch(f.zipUrl, { headers: fetchHeaders });
             if (!res.ok) throw new Error("Server rejected proxy request.");
 
-            // ✨ TURBO PIPELINE: Wrap stream to aggressively pull chunks and calculate live telemetry
             const reader = res.body.getReader();
             const telemetryChannel = new BroadcastChannel('sw-telemetry');
             
-            const stream = new ReadableStream({
-                async start(controller) {
-                    let loadedSinceLast = 0;
-                    let lastTime = Date.now();
-                    let totalLoaded = 0;
-                    const totalBytes = reqEnd - reqStart + 1;
+            let loadedSinceLast = 0;
+            let lastTime = performance.now();
+            let totalLoaded = 0;
+            const totalBytes = reqEnd - reqStart + 1;
 
+            // ✨ BACKPRESSURE PIPELINE: Only fetches data when the video player asks for it (Saves Mobile Data)
+            const stream = new ReadableStream({
+                async pull(controller) {
                     try {
-                        while (true) {
-                            const { done, value } = await reader.read();
-                            if (done) {
-                                controller.close();
-                                break;
-                            }
-                            controller.enqueue(value);
-                            
-                            loadedSinceLast += value.byteLength;
-                            totalLoaded += value.byteLength;
-                            
-                            const now = Date.now();
-                            if (now - lastTime > 400) {
-                                const speedMBps = (loadedSinceLast / (1024 * 1024)) / ((now - lastTime) / 1000);
-                                telemetryChannel.postMessage({
-                                    type: 'PROGRESS',
-                                    speed: speedMBps.toFixed(2),
-                                    loaded: totalLoaded,
-                                    total: totalBytes
-                                });
-                                lastTime = now;
-                                loadedSinceLast = 0;
-                            }
+                        const { done, value } = await reader.read();
+                        if (done) {
+                            controller.close();
+                            return;
+                        }
+                        controller.enqueue(value);
+                        
+                        loadedSinceLast += value.byteLength;
+                        totalLoaded += value.byteLength;
+                        
+                        const now = performance.now();
+                        if (now - lastTime > 500) { 
+                            const duration = (now - lastTime) / 1000;
+                            const speedMBps = (loadedSinceLast / (1024 * 1024)) / duration;
+                            telemetryChannel.postMessage({
+                                type: 'PROGRESS',
+                                speed: speedMBps.toFixed(2),
+                                loaded: totalLoaded,
+                                total: totalBytes
+                            });
+                            lastTime = now;
+                            loadedSinceLast = 0;
                         }
                     } catch (err) {
                         controller.error(err);
                     }
                 },
                 cancel(reason) {
-                    reader.cancel(reason); // Fixes Deadlocks if browser skips ahead
+                    reader.cancel(reason);
                 }
             });
 
@@ -124,6 +118,7 @@ async function handleStreamRequest(request, f, urlObj) {
                 resHeaders.set('Content-Type', mime);
                 resHeaders.set('Accept-Ranges', 'bytes');
                 
+                // Spoofed Content-Range mapping to fix mobile audio dropping
                 if (rangeHeader) {
                     resHeaders.set('Content-Range', `bytes ${start}-${end}/${f.size}`);
                     resHeaders.set('Content-Length', (end - start + 1).toString());
