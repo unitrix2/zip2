@@ -23,13 +23,11 @@
   .logo { font-size: 2.5rem; font-weight: 800; background: linear-gradient(135deg, var(--accent) 0%, var(--accent2) 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; letter-spacing: -1px; }
   .tagline { color: var(--muted); font-size: 0.85rem; font-weight: 500; margin-top: 0.5rem; text-transform: uppercase; letter-spacing: 2px; }
 
-  /* Input Zone */
   .input-zone { background: rgba(24, 24, 27, 0.6); backdrop-filter: blur(12px); border: 1px solid var(--border); border-radius: 16px; padding: 1.5rem; margin-bottom: 2rem; box-shadow: 0 10px 30px rgba(0,0,0,0.2); }
   .input-row { display: flex; gap: 0.75rem; align-items: center; }
   .url-input { flex: 1; background: rgba(0,0,0,0.3); border: 1px solid var(--border); border-radius: 10px; padding: 0.9rem 1.2rem; color: var(--text); font-family: var(--font-mono); font-size: 0.85rem; outline: none; transition: border 0.2s; }
   .url-input:focus { border-color: var(--accent); }
 
-  /* Buttons */
   .btn { padding: 0.9rem 1.5rem; border-radius: 10px; border: none; cursor: pointer; font-family: var(--font-sans); font-size: 0.85rem; font-weight: 600; transition: all 0.2s ease; white-space: nowrap; }
   .btn-primary { background: linear-gradient(135deg, var(--accent2), var(--accent)); color: #fff; box-shadow: 0 4px 15px rgba(56, 189, 248, 0.2); }
   .btn-primary:hover { transform: translateY(-2px); box-shadow: 0 6px 20px rgba(56, 189, 248, 0.3); }
@@ -39,7 +37,6 @@
   .btn-view { background: rgba(16, 185, 129, 0.1); color: var(--accent3); border: 1px solid rgba(16, 185, 129, 0.2); }
   .btn-view:hover { background: rgba(16, 185, 129, 0.2); }
 
-  /* Status & Explorer */
   .status-bar { display: flex; gap: 0.75rem; margin-top: 1.2rem; flex-wrap: wrap; align-items: center; }
   .badge { font-size: 0.75rem; font-weight: 500; padding: 0.3rem 0.8rem; border-radius: 20px; background: rgba(255,255,255,0.05); border: 1px solid var(--border); color: var(--text); }
   .badge.accent { color: var(--accent); border-color: rgba(56, 189, 248, 0.3); background: rgba(56, 189, 248, 0.05); }
@@ -57,12 +54,10 @@
   .file-size { font-size: 0.75rem; font-family: var(--font-mono); color: var(--muted); min-width: 70px; text-align: right; }
   .file-actions { display: flex; gap: 0.5rem; }
 
-  /* Toast Notifications */
   .toast-container { position: fixed; bottom: 2rem; right: 2rem; display: flex; flex-direction: column; gap: 0.75rem; z-index: 9999; }
   .toast { background: rgba(24, 24, 27, 0.9); backdrop-filter: blur(10px); border: 1px solid var(--border); border-left: 4px solid var(--accent); color: var(--text); padding: 1rem 1.5rem; border-radius: 8px; font-size: 0.85rem; font-weight: 500; box-shadow: 0 10px 30px rgba(0,0,0,0.3); animation: slideInRight 0.3s ease forwards; display: flex; align-items: center; gap: 0.75rem; }
   .toast.fadeOut { animation: fadeOutRight 0.4s ease forwards; }
 
-  /* Universal Viewer Modal */
   .modal-backdrop { position: fixed; inset: 0; background: rgba(0,0,0,0.95); z-index: 2000; display: none; align-items: center; justify-content: center; padding: 1rem; }
   .modal-backdrop.show { display: flex; animation: fadeIn 0.3s ease; }
   .viewer-modal { background: var(--surface); border: 1px solid var(--border); border-radius: 16px; overflow: hidden; width: 100%; max-width: 1100px; height: 85vh; display: flex; flex-direction: column; box-shadow: 0 10px 40px rgba(0,0,0,0.5); }
@@ -73,17 +68,14 @@
   
   .viewer-body { position: relative; flex: 1; background: #050505; display: flex; align-items: center; justify-content: center; overflow: hidden; }
   
-  /* Media Specific Styles */
   video { width: 100%; height: 100%; outline: none; background: #000; }
   audio { width: 80%; max-width: 600px; outline: none; }
   .img-viewer { max-width: 100%; max-height: 100%; object-fit: contain; }
   .pdf-viewer { width: 100%; height: 100%; border: none; background: #fff; }
   
-  /* MS Office Viewer container */
   .office-container { width: 100%; height: 100%; background: #f3f4f6; color: #111827; display: flex; flex-direction: column; overflow: hidden; }
   .office-doc { background: #fff; margin: 1.5rem auto; width: 95%; max-width: 900px; min-height: 100%; padding: 3rem; box-shadow: 0 4px 15px rgba(0,0,0,0.1); border-radius: 6px; font-family: 'Calibri', 'Arial', sans-serif; line-height: 1.5; overflow: auto; }
   
-  /* MS Excel UI Simulation */
   .excel-wrapper { flex: 1; width: 100%; overflow: auto; background: #fff; }
   .excel-tabs { display: flex; gap: 4px; background: #f3f4f6; padding: 0 10px 10px 10px; border-top: 1px solid #d4d4d4; overflow-x: auto; flex-shrink: 0; }
   .excel-tab { padding: 6px 16px; background: #e5e7eb; border: 1px solid #d4d4d4; border-top: none; border-radius: 0 0 6px 6px; cursor: pointer; font-family: 'Calibri', sans-serif; font-size: 0.85rem; font-weight: 500; color: #4b5563; white-space: nowrap; transition: background 0.2s; }
@@ -93,13 +85,11 @@
   table.excel-table th, table.excel-table td { border: 1px solid #d4d4d4; padding: 4px 8px; white-space: nowrap; color: #000; }
   table.excel-table tr:first-child { background: #f3f3f3; font-weight: bold; text-align: center; position: sticky; top: 0; box-shadow: 0 1px 0 #d4d4d4; z-index: 10; }
 
-  /* Loading State */
   .viewer-loading { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; background: rgba(5,5,5,0.9); z-index: 10; gap: 1rem; color: var(--muted); font-size: 0.9rem; }
   .spinner { width: 40px; height: 40px; border: 3px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin 1s linear infinite; }
   
   .viewer-footer { padding: 0.8rem 1.5rem; background: var(--surface2); border-top: 1px solid var(--border); font-size: 0.75rem; color: var(--muted); flex-shrink: 0; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem; }
 
-  /* Toggle Switch UI */
   .engine-toggle-wrap { display: flex; align-items: center; gap: 0.5rem; font-size: 0.75rem; color: var(--muted); cursor: pointer; }
   .toggle-checkbox { display: none; }
   .toggle-slider { width: 34px; height: 18px; background: var(--border); border-radius: 20px; position: relative; transition: 0.3s; }
@@ -180,7 +170,6 @@
 </div>
 
 <script>
-// ─── Service Worker Setup ───
 if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('sw.js').then(reg => {
         navigator.serviceWorker.addEventListener('controllerchange', () => { window.location.reload(); });
@@ -200,7 +189,6 @@ function registerStreamSW(id, payload) {
     });
 }
 
-// ─── File Extensions & Icons ───
 const EXT = {
     VIDEO: ['mp4','webm','mkv','avi','mov','ts'],
     AUDIO: ['mp3','wav','ogg','flac','m4a'],
@@ -224,7 +212,6 @@ function canView(name) { return Object.values(EXT).some(arr => arr.includes(getE
 
 let zipUrl = ''; let zipSize = 0; let allFiles = [];
 
-// ─── ZIP Parser Logic ───
 async function fetchRange(url, start, end) {
   const res = await fetch(url, { headers: { 'Range': `bytes=${start}-${end}` } });
   if (!res.ok) throw new Error(`HTTP Error ${res.status}`);
@@ -313,7 +300,6 @@ async function prepareFileData(f) {
     return f;
 }
 
-// ─── Download File ───
 async function downloadFile(path) {
   const f = allFiles.find(file => file.path === path); if (!f) return;
   showToast(`🚀 Sending "${f.name}" to browser downloads...`);
@@ -338,9 +324,11 @@ function toggleEngine() {
     if (window.currentViewingPath) viewFile(window.currentViewingPath);
 }
 
-// ✨ ULTIMATE PC AUDIO FALLBACK: Aggressively replaces <video> tag with <audio> tag
+// ✨ THE FIX: Add ?audio_fallback=1 to completely bypass stalled browser caches
 window.triggerAudioFallback = function(streamUrl) {
     const container = document.getElementById('renderContainer');
+    const audioUrl = streamUrl + "&audio_fallback=1";
+    
     container.innerHTML = `
       <div style="width:100%; height:100%; display:flex; flex-direction:column; justify-content:center; align-items:center; gap:20px; text-align:center;">
           <div style="font-size:4rem; animation: pulse 2s infinite;">🔊</div>
@@ -348,10 +336,10 @@ window.triggerAudioFallback = function(streamUrl) {
               Audio Extractor Active
           </div>
           <div style="color:var(--muted); font-size:0.85rem; max-width:400px; line-height:1.4;">
-              Your PC doesn't support this video format natively (e.g., HEVC/AC3). We've successfully bypassed the video decoder to stream the audio track.
+              Video skipped. Extracting pure audio track for compatibility.
           </div>
           <audio controls autoplay style="width:80%; max-width:600px; margin-top:10px;">
-              <source src="${streamUrl}">
+              <source src="${audioUrl}">
           </audio>
       </div>`;
     
@@ -372,8 +360,7 @@ async function viewFile(path) {
   const toggleWrap = document.getElementById('engineToggleWrap');
   
   if (window.currentBlobUrl) { URL.revokeObjectURL(window.currentBlobUrl); window.currentBlobUrl = null; }
-  // Clear previous timeouts if any
-  if (window.deadlockWatchdog) clearTimeout(window.deadlockWatchdog);
+  if (window.deadlockWatchdog) clearInterval(window.deadlockWatchdog);
   
   container.innerHTML = '';
   
@@ -427,25 +414,29 @@ async function viewFile(path) {
           container.innerHTML = `<video controls playsinline preload="auto"><source src="${targetStreamUrl}"></video>`;
           const vid = container.querySelector('video');
           
-          let isPlaying = false;
-          
           vid.onplaying = () => {
-              isPlaying = true;
               loading.style.display = 'none';
-              if (window.deadlockWatchdog) clearTimeout(window.deadlockWatchdog);
           };
           
           vid.onerror = () => {
               window.triggerAudioFallback(targetStreamUrl);
           };
 
-          // SMART PC DETECTOR: If video stays stuck loading for > 3.5 seconds, it forces the <audio> bypass
-          window.deadlockWatchdog = setTimeout(() => {
-              if (!isPlaying) {
-                  console.log("Watchdog triggered: Video stalled. Bypassing to Audio tag.");
+          // ✨ THE FIX: Wait up to 8 seconds, but ONLY trigger if the video hasn't loaded data yet (readyState < 3).
+          let stallSeconds = 0;
+          window.deadlockWatchdog = setInterval(() => {
+              if (vid.readyState >= 3) {
+                  clearInterval(window.deadlockWatchdog); // Success! Data is flowing.
+                  loading.style.display = 'none';
+                  return;
+              }
+              stallSeconds++;
+              if (stallSeconds >= 8) { // 8 seconds patience
+                  clearInterval(window.deadlockWatchdog);
+                  console.log("Watchdog triggered: Browser failed to decode within 8 seconds. Bypassing to Audio tag.");
                   window.triggerAudioFallback(targetStreamUrl);
               }
-          }, 3500);
+          }, 1000);
 
       } 
       else if (EXT.AUDIO.includes(ext)) {
@@ -496,7 +487,7 @@ window.switchExcelSheet = function(sheetName, tabElement) {
 };
 
 function closeViewer() { 
-  if (window.deadlockWatchdog) clearTimeout(window.deadlockWatchdog);
+  if (window.deadlockWatchdog) clearInterval(window.deadlockWatchdog);
   if (window.currentBlobUrl) { URL.revokeObjectURL(window.currentBlobUrl); window.currentBlobUrl = null; }
   document.getElementById('renderContainer').innerHTML = '';
   document.getElementById('viewerModal').classList.remove('show');
