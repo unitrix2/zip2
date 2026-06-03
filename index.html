@@ -101,7 +101,7 @@
   .toggle-checkbox { display: none; }
   .toggle-slider { width: 34px; height: 18px; background: var(--border); border-radius: 20px; position: relative; transition: 0.3s; }
   .toggle-slider::after { content: ''; width: 14px; height: 14px; background: #fff; border-radius: 50%; position: absolute; top: 2px; left: 2px; transition: 0.3s; }
-  .toggle-checkbox:checked + .toggle-slider { background: var(--accent3); } /* Green for Data Saver */
+  .toggle-checkbox:checked + .toggle-slider { background: var(--accent3); } 
   .toggle-checkbox:checked + .toggle-slider::after { transform: translateX(16px); }
 
   @keyframes spin { 100% { transform: rotate(360deg); } }
@@ -389,7 +389,6 @@ async function viewFile(path) {
           const streamId = 'vid_' + Date.now();
           await registerStreamSW(streamId, { zipUrl, compression: f.compression, size: f.size, dataStart: f.dataStart, dataEnd: f.dataEnd, name: f.name });
           
-          // ✨ Append &saver=1 flag to URL based on toggle
           targetStreamUrl = window.location.pathname + `?sw_stream=${streamId}` + (windowUseSaverMode ? "&saver=1" : "");
           telemetryDash.style.display = 'flex';
       } 
