@@ -338,34 +338,25 @@ function toggleEngine() {
     if (window.currentViewingPath) viewFile(window.currentViewingPath);
 }
 
-// Smart Codec Fallback Trigger
+// ✨ ULTIMATE PC AUDIO FALLBACK: Aggressively replaces <video> tag with <audio> tag
 window.triggerAudioFallback = function(streamUrl) {
     const container = document.getElementById('renderContainer');
     container.innerHTML = `
       <div style="width:100%; height:100%; display:flex; flex-direction:column; justify-content:center; align-items:center; gap:20px; text-align:center;">
-          <div style="font-size:3rem;">🎵</div>
-          <div style="color:var(--warn); font-family:var(--font-sans); font-size:0.95rem;">
-              <b>Video Codec Unsupported on PC</b><br>
-              <span style="font-size:0.8rem; color:var(--muted);">Attempting to play audio track. If this fails too, please Download the file.</span>
+          <div style="font-size:4rem; animation: pulse 2s infinite;">🔊</div>
+          <div style="color:var(--accent); font-family:var(--font-sans); font-size:1rem; font-weight:600;">
+              Audio Extractor Active
           </div>
-          <audio controls autoplay style="width:80%; max-width:600px;">
+          <div style="color:var(--muted); font-size:0.85rem; max-width:400px; line-height:1.4;">
+              Your PC doesn't support this video format natively (e.g., HEVC/AC3). We've successfully bypassed the video decoder to stream the audio track.
+          </div>
+          <audio controls autoplay style="width:80%; max-width:600px; margin-top:10px;">
               <source src="${streamUrl}">
           </audio>
       </div>`;
     
-    // Test if even Audio fails
-    const aud = container.querySelector('audio');
-    aud.onerror = () => {
-        container.innerHTML = `
-          <div style="text-align:center; padding:2rem;">
-              <div style="font-size:3rem; margin-bottom:1rem;">❌</div>
-              <div style="color:var(--danger); font-size:1rem; font-weight:bold;">Format Completely Unsupported</div>
-              <div style="color:var(--muted); font-size:0.85rem; margin-top:10px; max-width:400px; line-height:1.5;">
-                  Your PC browser lacks the licensing to decode this media file (likely MKV/AC3/HEVC). Mobile browsers usually support this natively. <br><br>
-                  <b>Please use the Download button to play it in VLC Player.</b>
-              </div>
-          </div>`;
-    };
+    const loading = document.getElementById('viewerLoading');
+    if(loading) loading.style.display = 'none';
 };
 
 async function viewFile(path) {
@@ -381,12 +372,15 @@ async function viewFile(path) {
   const toggleWrap = document.getElementById('engineToggleWrap');
   
   if (window.currentBlobUrl) { URL.revokeObjectURL(window.currentBlobUrl); window.currentBlobUrl = null; }
+  // Clear previous timeouts if any
+  if (window.deadlockWatchdog) clearTimeout(window.deadlockWatchdog);
+  
   container.innerHTML = '';
   
   const ext = f.ext;
   toggleWrap.style.display = (EXT.VIDEO.includes(ext) || EXT.AUDIO.includes(ext)) ? 'none' : 'flex';
 
-  const engineBadge = (EXT.VIDEO.includes(ext) || EXT.AUDIO.includes(ext)) ? '<span class="badge" style="color:#38bdf8; border-color:#38bdf8;">Native Stream</span>' : (windowUseSwMode ? '<span class="badge" style="color:#a855f7; border-color:#a855f7;">SW Mode</span>' : '<span class="badge" style="color:#10b981; border-color:#10b981;">⚡ Insta-Load</span>');
+  const engineBadge = (EXT.VIDEO.includes(ext) || EXT.AUDIO.includes(ext)) ? '<span class="badge" style="color:#38bdf8; border-color:#38bdf8;">Native Proxy</span>' : (windowUseSwMode ? '<span class="badge" style="color:#a855f7; border-color:#a855f7;">SW Mode</span>' : '<span class="badge" style="color:#10b981; border-color:#10b981;">⚡ Insta-Load</span>');
   info.innerHTML = `${engineBadge} <span class="badge">Format: ${f.ext.toUpperCase()}</span> <span class="badge">Size: ${formatSize(f.size)}</span>`;
   title.innerHTML = `${getIcon(f.name)} ${f.name}`;
   
@@ -409,7 +403,6 @@ async function viewFile(path) {
           targetStreamUrl = window.location.pathname + `?sw_stream=${streamId}`;
       } 
       else {
-          // Documents handling...
           if (windowUseSwMode) {
               const streamId = 'doc_' + Date.now();
               await registerStreamSW(streamId, { zipUrl, compression: f.compression, size: f.size, dataStart: f.dataStart, dataEnd: f.dataEnd, name: f.name });
@@ -434,20 +427,26 @@ async function viewFile(path) {
           container.innerHTML = `<video controls playsinline preload="auto"><source src="${targetStreamUrl}"></video>`;
           const vid = container.querySelector('video');
           
-          vid.oncanplay = () => loading.style.display = 'none';
-          vid.onplaying = () => loading.style.display = 'none';
+          let isPlaying = false;
           
-          // Smart Error Detection
-          vid.onerror = (e) => {
+          vid.onplaying = () => {
+              isPlaying = true;
               loading.style.display = 'none';
-              const err = vid.error;
-              // Code 4 is MEDIA_ERR_SRC_NOT_SUPPORTED (Codec issue)
-              if (err && err.code === 4) {
-                  window.triggerAudioFallback(targetStreamUrl);
-              } else {
-                  container.innerHTML = `<div style="color:var(--danger)">Network Error while streaming video. Check connection.</div>`;
-              }
+              if (window.deadlockWatchdog) clearTimeout(window.deadlockWatchdog);
           };
+          
+          vid.onerror = () => {
+              window.triggerAudioFallback(targetStreamUrl);
+          };
+
+          // SMART PC DETECTOR: If video stays stuck loading for > 3.5 seconds, it forces the <audio> bypass
+          window.deadlockWatchdog = setTimeout(() => {
+              if (!isPlaying) {
+                  console.log("Watchdog triggered: Video stalled. Bypassing to Audio tag.");
+                  window.triggerAudioFallback(targetStreamUrl);
+              }
+          }, 3500);
+
       } 
       else if (EXT.AUDIO.includes(ext)) {
           container.innerHTML = `<div style="text-align:center;"><div style="font-size:4rem; margin-bottom:2rem;">🎵</div><audio controls autoplay style="width:80%; max-width:500px;"><source src="${targetStreamUrl}"></audio></div>`;
@@ -462,7 +461,6 @@ async function viewFile(path) {
           loading.style.display = 'none';
       }
       else if (EXT.OFFICE.includes(ext)) {
-          // Document Renderers...
           loading.style.display = 'none';
           if (['xls', 'xlsx', 'xlsm', 'csv'].includes(ext)) {
               while(typeof XLSX === 'undefined') { await new Promise(r => setTimeout(r, 100)); }
@@ -498,6 +496,7 @@ window.switchExcelSheet = function(sheetName, tabElement) {
 };
 
 function closeViewer() { 
+  if (window.deadlockWatchdog) clearTimeout(window.deadlockWatchdog);
   if (window.currentBlobUrl) { URL.revokeObjectURL(window.currentBlobUrl); window.currentBlobUrl = null; }
   document.getElementById('renderContainer').innerHTML = '';
   document.getElementById('viewerModal').classList.remove('show');
