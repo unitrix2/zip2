@@ -36,12 +36,12 @@ async function handleStreamRequest(request, f, isDownload) {
     try {
         const rangeHeader = request.headers.get('Range');
         
-        // --- 1. STORED MEDIA (0% Compression) - NATIVE PROXY ---
-        // Ye logic Audio aur Video dono tracks ko bina block kiye ek sath process karega
+        // --- NATIVE PROXY ENGINE WITH SMART HEADER SPOOFING ---
         if (f.compression === 0) {
             let start = 0;
             let end = f.size - 1;
 
+            // Browser video player sends exact bytes it needs
             if (rangeHeader) {
                 const match = rangeHeader.match(/bytes=(\d+)-(\d*)/);
                 if (match) {
@@ -50,17 +50,24 @@ async function handleStreamRequest(request, f, isDownload) {
                 }
             }
 
+            // Boundary checks to prevent out-of-range crashes
+            if (start >= f.size) start = f.size - 1;
+            if (end >= f.size) end = f.size - 1;
+
+            // Map local video bytes to global ZIP coordinates
             const reqStart = f.dataStart + start;
             const reqEnd = f.dataStart + end;
             
             const fetchHeaders = new Headers();
             fetchHeaders.set('Range', `bytes=${reqStart}-${reqEnd}`);
             
-            // Fetch directly and pipe natively (Fixes PC buffering & Mobile Audio drops)
+            // Direct proxy fetch
             const res = await fetch(f.zipUrl, { headers: fetchHeaders });
             
             if (!res.ok) throw new Error("Server rejected proxy request.");
 
+            // ✨ CRITICAL FIX: We MUST rewrite the headers here. 
+            // Do NOT forward the original Cloudflare headers, they confuse the Mobile browser's audio multiplexer.
             const resHeaders = new Headers();
             resHeaders.set('Access-Control-Allow-Origin', '*');
             
@@ -73,6 +80,7 @@ async function handleStreamRequest(request, f, isDownload) {
                 resHeaders.set('Content-Type', getMimeType(f.name));
                 resHeaders.set('Accept-Ranges', 'bytes');
                 
+                // Construct completely fake "Content-Range" so the browser thinks it's a standalone video file
                 if (rangeHeader) {
                     resHeaders.set('Content-Range', `bytes ${start}-${end}/${f.size}`);
                     resHeaders.set('Content-Length', (end - start + 1).toString());
@@ -83,8 +91,8 @@ async function handleStreamRequest(request, f, isDownload) {
                 return new Response(res.body, { status: 200, headers: resHeaders });
             }
         } 
-        // --- 2. DEFLATED FILES (Compressed) ---
         else {
+            // Deflated files
             const fetchHeaders = new Headers();
             fetchHeaders.set('Range', `bytes=${f.dataStart}-${f.dataEnd}`);
             
@@ -99,9 +107,8 @@ async function handleStreamRequest(request, f, isDownload) {
                 resHeaders.set('Content-Type', 'application/octet-stream');
             } else {
                 resHeaders.set('Content-Type', getMimeType(f.name));
-                resHeaders.set('Accept-Ranges', 'none'); // Compressed files cannot be sought
+                resHeaders.set('Accept-Ranges', 'none'); 
             }
-            
             return new Response(stream, { status: 200, headers: resHeaders });
         }
     } catch(e) {
