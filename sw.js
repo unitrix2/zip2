@@ -28,20 +28,28 @@ self.addEventListener('fetch', event => {
             event.respondWith(new Response('Stream expired. Please reload.', { status: 404 }));
             return;
         }
-        event.respondWith(handleStreamRequest(event.request, fileData, url.searchParams.get('dl') === '1'));
+        event.respondWith(handleStreamRequest(event.request, fileData, url));
     }
 });
 
-async function handleStreamRequest(request, f, isDownload) {
+async function handleStreamRequest(request, f, urlObj) {
     try {
         const rangeHeader = request.headers.get('Range');
+        const isDownload = urlObj.searchParams.get('dl') === '1';
         
-        // --- NATIVE PROXY ENGINE WITH SMART HEADER SPOOFING ---
+        // ✨ THE FIX: Detect if this is an audio fallback request
+        const isAudioFallback = urlObj.searchParams.get('audio_fallback') === '1';
+        
+        // Dynamically spoof MIME type to trick PC browsers into Audio-Only pipeline
+        let mime = getMimeType(f.name);
+        if (isAudioFallback && mime.startsWith('video/')) {
+            mime = mime.replace('video/', 'audio/');
+        }
+
         if (f.compression === 0) {
             let start = 0;
             let end = f.size - 1;
 
-            // Browser video player sends exact bytes it needs
             if (rangeHeader) {
                 const match = rangeHeader.match(/bytes=(\d+)-(\d*)/);
                 if (match) {
@@ -50,24 +58,19 @@ async function handleStreamRequest(request, f, isDownload) {
                 }
             }
 
-            // Boundary checks to prevent out-of-range crashes
             if (start >= f.size) start = f.size - 1;
             if (end >= f.size) end = f.size - 1;
 
-            // Map local video bytes to global ZIP coordinates
             const reqStart = f.dataStart + start;
             const reqEnd = f.dataStart + end;
             
             const fetchHeaders = new Headers();
             fetchHeaders.set('Range', `bytes=${reqStart}-${reqEnd}`);
             
-            // Direct proxy fetch
             const res = await fetch(f.zipUrl, { headers: fetchHeaders });
             
             if (!res.ok) throw new Error("Server rejected proxy request.");
 
-            // ✨ CRITICAL FIX: We MUST rewrite the headers here. 
-            // Do NOT forward the original Cloudflare headers, they confuse the Mobile browser's audio multiplexer.
             const resHeaders = new Headers();
             resHeaders.set('Access-Control-Allow-Origin', '*');
             
@@ -77,10 +80,9 @@ async function handleStreamRequest(request, f, isDownload) {
                 resHeaders.set('Content-Length', f.size.toString());
                 return new Response(res.body, { status: 200, headers: resHeaders });
             } else {
-                resHeaders.set('Content-Type', getMimeType(f.name));
+                resHeaders.set('Content-Type', mime); // Spoofed or Original MIME
                 resHeaders.set('Accept-Ranges', 'bytes');
                 
-                // Construct completely fake "Content-Range" so the browser thinks it's a standalone video file
                 if (rangeHeader) {
                     resHeaders.set('Content-Range', `bytes ${start}-${end}/${f.size}`);
                     resHeaders.set('Content-Length', (end - start + 1).toString());
@@ -92,7 +94,6 @@ async function handleStreamRequest(request, f, isDownload) {
             }
         } 
         else {
-            // Deflated files
             const fetchHeaders = new Headers();
             fetchHeaders.set('Range', `bytes=${f.dataStart}-${f.dataEnd}`);
             
@@ -106,7 +107,7 @@ async function handleStreamRequest(request, f, isDownload) {
                 resHeaders.set('Content-Disposition', `attachment; filename="${encodeURIComponent(f.name)}"`);
                 resHeaders.set('Content-Type', 'application/octet-stream');
             } else {
-                resHeaders.set('Content-Type', getMimeType(f.name));
+                resHeaders.set('Content-Type', mime);
                 resHeaders.set('Accept-Ranges', 'none'); 
             }
             return new Response(stream, { status: 200, headers: resHeaders });
