@@ -36,8 +36,67 @@ async function handleStreamRequest(request, f, urlObj) {
     try {
         const rangeHeader = request.headers.get('Range');
         const isDownload = urlObj.searchParams.get('dl') === '1';
-        let mime = getMimeType(f.name);
+        const mime = getMimeType(f.name);
 
+        // ==========================================
+        // ENGINE 1: RESILIENT DOWNLOAD (Bypasses 2GB limit)
+        // ==========================================
+        if (isDownload) {
+            const resilientStream = new ReadableStream({
+                async start(controller) {
+                    let currentOffset = f.dataStart;
+                    const actualEnd = f.dataEnd;
+                    let retryCount = 0;
+
+                    async function fetchNextChunk() {
+                        if (currentOffset > actualEnd) {
+                            try { controller.close(); } catch(e){}
+                            return;
+                        }
+                        try {
+                            const headers = new Headers();
+                            headers.set('Range', `bytes=${currentOffset}-${actualEnd}`);
+                            const res = await fetch(f.zipUrl, { headers });
+                            
+                            if (!res.ok) throw new Error("HTTP Error");
+                            const reader = res.body.getReader();
+                            retryCount = 0;
+
+                            while (true) {
+                                const { done, value } = await reader.read();
+                                if (done) break;
+                                controller.enqueue(value);
+                                currentOffset += value.byteLength;
+                            }
+                            // Auto-Reconnect if connection dropped before end (2GB Limit fix)
+                            if (currentOffset <= actualEnd) {
+                                fetchNextChunk();
+                            } else {
+                                try { controller.close(); } catch(e){}
+                            }
+                        } catch (e) {
+                            retryCount++;
+                            if (retryCount > 10) { try { controller.error(e); } catch(err){} return; }
+                            setTimeout(fetchNextChunk, 1000);
+                        }
+                    }
+                    fetchNextChunk();
+                }
+            });
+
+            let finalStream = f.compression === 8 ? resilientStream.pipeThrough(new DecompressionStream('deflate-raw')) : resilientStream;
+
+            const resHeaders = new Headers();
+            resHeaders.set('Access-Control-Allow-Origin', '*');
+            resHeaders.set('Content-Disposition', `attachment; filename="${encodeURIComponent(f.name)}"`);
+            resHeaders.set('Content-Type', 'application/octet-stream');
+            resHeaders.set('Content-Length', f.size.toString());
+            return new Response(finalStream, { status: 200, headers: resHeaders });
+        }
+
+        // ==========================================
+        // ENGINE 2: NATIVE PLAYBACK PROXY (Netflix Smoothness)
+        // ==========================================
         if (f.compression === 0) {
             let start = 0;
             let end = f.size - 1;
@@ -59,75 +118,24 @@ async function handleStreamRequest(request, f, urlObj) {
             const fetchHeaders = new Headers();
             fetchHeaders.set('Range', `bytes=${reqStart}-${reqEnd}`);
             
+            // DIRECT NATIVE FETCH: No stream wrapping to ensure perfect Seek & Range support
             const res = await fetch(f.zipUrl, { headers: fetchHeaders });
             if (!res.ok) throw new Error("Server rejected proxy request.");
 
-            const reader = res.body.getReader();
-            const telemetryChannel = new BroadcastChannel('sw-telemetry');
-            
-            let loadedSinceLast = 0;
-            let lastTime = performance.now();
-            let totalLoaded = 0;
-            const totalBytes = reqEnd - reqStart + 1;
-
-            // ✨ BACKPRESSURE PIPELINE: Only fetches data when the video player asks for it (Saves Mobile Data)
-            const stream = new ReadableStream({
-                async pull(controller) {
-                    try {
-                        const { done, value } = await reader.read();
-                        if (done) {
-                            controller.close();
-                            return;
-                        }
-                        controller.enqueue(value);
-                        
-                        loadedSinceLast += value.byteLength;
-                        totalLoaded += value.byteLength;
-                        
-                        const now = performance.now();
-                        if (now - lastTime > 500) { 
-                            const duration = (now - lastTime) / 1000;
-                            const speedMBps = (loadedSinceLast / (1024 * 1024)) / duration;
-                            telemetryChannel.postMessage({
-                                type: 'PROGRESS',
-                                speed: speedMBps.toFixed(2),
-                                loaded: totalLoaded,
-                                total: totalBytes
-                            });
-                            lastTime = now;
-                            loadedSinceLast = 0;
-                        }
-                    } catch (err) {
-                        controller.error(err);
-                    }
-                },
-                cancel(reason) {
-                    reader.cancel(reason);
-                }
-            });
-
             const resHeaders = new Headers();
             resHeaders.set('Access-Control-Allow-Origin', '*');
+            resHeaders.set('Content-Type', mime);
+            resHeaders.set('Accept-Ranges', 'bytes');
             
-            if (isDownload) {
-                resHeaders.set('Content-Disposition', `attachment; filename="${encodeURIComponent(f.name)}"`);
-                resHeaders.set('Content-Type', 'application/octet-stream');
-                resHeaders.set('Content-Length', f.size.toString());
-                return new Response(stream, { status: 200, headers: resHeaders });
-            } else {
-                resHeaders.set('Content-Type', mime);
-                resHeaders.set('Accept-Ranges', 'bytes');
-                
-                // Spoofed Content-Range mapping to fix mobile audio dropping
-                if (rangeHeader) {
-                    resHeaders.set('Content-Range', `bytes ${start}-${end}/${f.size}`);
-                    resHeaders.set('Content-Length', (end - start + 1).toString());
-                    return new Response(stream, { status: 206, headers: resHeaders });
-                }
-                
-                resHeaders.set('Content-Length', f.size.toString());
-                return new Response(stream, { status: 200, headers: resHeaders });
+            // Map the range back to fake the browser into thinking it's a standalone file
+            if (rangeHeader) {
+                resHeaders.set('Content-Range', `bytes ${start}-${end}/${f.size}`);
+                resHeaders.set('Content-Length', (end - start + 1).toString());
+                return new Response(res.body, { status: 206, headers: resHeaders });
             }
+            
+            resHeaders.set('Content-Length', f.size.toString());
+            return new Response(res.body, { status: 200, headers: resHeaders });
         } 
         else {
             const fetchHeaders = new Headers();
@@ -138,14 +146,8 @@ async function handleStreamRequest(request, f, urlObj) {
             
             const resHeaders = new Headers();
             resHeaders.set('Access-Control-Allow-Origin', '*');
-            
-            if (isDownload) {
-                resHeaders.set('Content-Disposition', `attachment; filename="${encodeURIComponent(f.name)}"`);
-                resHeaders.set('Content-Type', 'application/octet-stream');
-            } else {
-                resHeaders.set('Content-Type', mime);
-                resHeaders.set('Accept-Ranges', 'none'); 
-            }
+            resHeaders.set('Content-Type', mime);
+            resHeaders.set('Accept-Ranges', 'none'); 
             return new Response(stream, { status: 200, headers: resHeaders });
         }
     } catch(e) {
